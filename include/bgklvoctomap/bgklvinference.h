@@ -99,34 +99,34 @@ namespace la3dm {
 
         void point_to_line_dist(const MatrixPType &x, const MatrixXType &z, MatrixKType &d) const {
             assert((x.cols() == 3) && (z.cols() == 6));
-            d = MatrixKType::Zero(x.rows(), z.rows());
+            d = MatrixKType::Zero(x.rows(), z.rows()); // x rows should == 1 because it is only one point
             float line_len;
             point3f p, p0, p1, v, w, line_vec, pnt_vec, nearest;
             float t;
             for (int i = 0; i < x.rows(); ++i) {
                 p = point3f(x(i,0), x(i,1), x(i,2));
                 for (int j = 0; j < z.rows(); ++j) {
-                    p0 = point3f(z(j,0), z(j,1), z(j,2));
-                    p1 = point3f(z(j,3), z(j,4), z(j,5));
+                    p0 = point3f(z(j,0), z(j,1), z(j,2)); // Ray start
+                    p1 = point3f(z(j,3), z(j,4), z(j,5)); // Ray end
                     line_vec = p1 - p0;
-                    line_len = line_vec.norm();
+                    line_len = line_vec.norm(); // length of ray
                     pnt_vec = p - p0;
-                    if (line_len < EPSILON) {
-                        d(i,j) = (p-p0).norm();
+                    if (line_len < EPSILON) { // if ray is basicly zero 
+                        d(i,j) = (p-p0).norm(); // return distande to ray origin (probably a hit point)
                     }
                     else {
                         double c1 = pnt_vec.dot(line_vec);
                         double c2 = line_vec.dot(line_vec);
-                        if ( c1 <= 0) {
-                            d(i,j) = (p - p0).norm();
+                        if ( c1 <= 0) { // if projection falls before ray starts
+                            d(i,j) = (p - p0).norm(); // return distance to ray origin
                         }
-                        else if (c2 <= c1) {
-                            d(i,j) = (p - p1).norm();
+                        else if (c2 <= c1) { // if projection falls after ray end
+                            d(i,j) = (p - p1).norm(); // return distance to ray end
                         }
-                        else{
+                        else{ // if projection fals between ray start and ray end
                         double b = c1 / c2;
-                        nearest = p0 + (line_vec*b);
-                        d(i,j) = (p - nearest).norm();
+                        nearest = p0 + (line_vec*b); // closest point on the segment
+                        d(i,j) = (p - nearest).norm(); // return distance to closest point on the segment
                         }
                     }
                 }
@@ -142,8 +142,8 @@ namespace la3dm {
          */
         void covSparseLine(const MatrixPType &x, const MatrixXType &z, MatrixKType &Kxz) const {
             point_to_line_dist(x, z, Kxz); // Check on this
-            Kxz /= ell;
-
+            Kxz /= ell; // divide distance by l kernel region of influence
+            // if covariance is above one, truncate to one
             for (int i = 0; i < Kxz.rows(); ++i)
             {
                 for (int j = 0; j < Kxz.cols(); ++j)

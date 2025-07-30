@@ -134,7 +134,8 @@ namespace la3dm {
 #pragma omp parallel for schedule(dynamic)
 #endif
         //create key for each block from point cloud, begin loop to process each block
-        for (int i = 0; i < blocks.size(); ++i) {
+        for (int i = 0; i < blocks.size(); ++i) 
+        {
             BlockHashKey key = blocks[i];
 
 #ifdef OPENMP
@@ -182,7 +183,7 @@ namespace la3dm {
             {
                 //run in parallel, define data that exists in node influence as hits or rays
                 for (int j = 0; j < xy_idx.size(); ++j) {
-                    if (ray_idx[xy_idx[j]] == -1) {
+                    if (ray_idx[xy_idx[j]] == -1) { // Add hits
                         block_x.push_back(xy[xy_idx[j]].first.x0());
                         block_x.push_back(xy[xy_idx[j]].first.y0());
                         block_x.push_back(xy[xy_idx[j]].first.z0());
@@ -191,8 +192,8 @@ namespace la3dm {
                         block_x.push_back(xy[xy_idx[j]].first.z0());
                         block_y.push_back(1.0f);
                     }
-                    else if (ray_keys[ray_idx[xy_idx[j]]] == 0) {
-                        ray_keys[ray_idx[xy_idx[j]]] = 1;
+                    else if (ray_keys[ray_idx[xy_idx[j]]] == 0) { // add free space rays
+                        ray_keys[ray_idx[xy_idx[j]]] = 1; 
                         block_x.push_back(rays[ray_idx[xy_idx[j]]].first.x0());
                         block_x.push_back(rays[ray_idx[xy_idx[j]]].first.y0());
                         block_x.push_back(rays[ray_idx[xy_idx[j]]].first.z0());
@@ -312,14 +313,17 @@ namespace la3dm {
         int idx = 0;
         double offset = OcTreeNode::ell*pow(2,0.5);
         double influence = OcTreeNode::ell;
+        // Iterate though each hit point
         for (auto it = sampled_hits.begin(); it != sampled_hits.end(); ++it) {
             point3f p(it->x, it->y, it->z);
             double l = (p - origin).norm();
+            // Computes a normalized ray direction from the origin (sensor location) to the hit point.
             float nx = (p.x() - origin.x()) / l;
             float ny = (p.y() - origin.y()) / l;
             float nz = (p.z() - origin.z()) / l;
 
             //filter out points too far away, but keep rays up to max_range
+            // Adjusts range based on max_range and adds the hit as an occupied point:
             if (max_range > 0) {
                 if (l < max_range){
                     l = (float) sqrt((p.x() - origin.x()) * (p.x() - origin.x()) + (p.y() - origin.y()) * (p.y() - origin.y()) + (p.z() - origin.z()) * (p.z() - origin.z()));
@@ -334,9 +338,11 @@ namespace la3dm {
             }
 
             point3f nearest_point = p;
+            // Get ray end point
             point3f free_endpt(origin.x() + nx * l, origin.y() + ny * l, origin.z() + nz * l);
 
             //find points "near" the ray
+            // Finds Nearby Points That Might Block the Ray
             PointCloud nearby_points;
             for (auto iter = sampled_hits.begin(); iter != sampled_hits.end(); ++iter) {
                 point3f p0(iter->x, iter->y, iter->z);
