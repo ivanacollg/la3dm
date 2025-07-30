@@ -12,11 +12,19 @@
     <arg name="method" default="bgklvoctomap"/>
     <arg name="method_config" value="$(find la3dm)/config/methods"/>
 
+    <arg name="rviz" default="true" />
+    <arg name="dataset" default="sim_structured"/>
+    <!--Start RVIZ-->
+    <node name="rviz_map" pkg="rviz" type="rviz"
+        args="-d $(find la3dm)/rviz/$(arg dataset).rviz"
+        if="$(arg rviz)">
+    </node>
+
     <!--Start the LA3DM node -->
     <node pkg="la3dm" type="$(arg method)_server" name="la3dm_server" output="screen">
 
         <!-- Load method configuration from file -->
-        <rosparam file="$(arg method_config)/$(arg method)_large_map.yaml" command="load"/>
+        <rosparam file="$(arg method_config)/$(arg method)_marina.yaml" command="load"/>
         
     </node>
 
