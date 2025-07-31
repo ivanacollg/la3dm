@@ -9,7 +9,7 @@
 
     <param name="/use_sim_time" value="true"/>
 
-    <arg name="method" default="bgklvoctomap"/>
+    <arg name="method" default="bgklvcoctomap"/>
     <arg name="method_config" value="$(find la3dm)/config/methods"/>
 
     <arg name="rviz" default="true" />

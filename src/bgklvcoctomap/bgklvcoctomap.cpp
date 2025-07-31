@@ -301,7 +301,7 @@ namespace la3dm {
     }
 
     //method to build training dataset from raw pointcloud data
-    void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
+void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
                                       float free_resolution, float max_range, GPLineCloud &xy, GPLineCloud &rays, vector<int> &ray_idx) const {
         //downsample all incoming data
         PCLPointCloud sampled_hits;
@@ -434,13 +434,42 @@ namespace la3dm {
             return;
         }
 
-        PCLPointCloud::Ptr pcl_in(new PCLPointCloud(in));
+        using VoxelKey = std::tuple<int, int, int>;
+        struct VoxelStats {
+            Eigen::Vector3f sum_xyz = Eigen::Vector3f::Zero();
+            float max_conf = -std::numeric_limits<float>::infinity();
+            int count = 0;
+        };
 
-        pcl::VoxelGrid<PCLPointType> sor;
-        sor.setInputCloud(pcl_in);
-        sor.setLeafSize(ds_resolution, ds_resolution, ds_resolution);
-        sor.filter(out);
-    }
+        std::unordered_map<VoxelKey, VoxelStats, boost::hash<VoxelKey>> voxel_map;
+
+        // 1. Accumulate stats for each voxel
+        for (const auto& pt : in) {
+            if (!pcl::isFinite(pt)) continue;
+
+            int ix = static_cast<int>(std::floor(pt.x / ds_resolution));
+            int iy = static_cast<int>(std::floor(pt.y / ds_resolution));
+            int iz = static_cast<int>(std::floor(pt.z / ds_resolution));
+            VoxelKey key(ix, iy, iz);
+
+            auto& voxel = voxel_map[key];
+            voxel.sum_xyz += Eigen::Vector3f(pt.x, pt.y, pt.z);
+            voxel.max_conf = std::max(voxel.max_conf, pt.intensity);
+            voxel.count += 1;
+        }
+
+        // 2. Construct out
+        out.clear();
+        for (const auto& kv : voxel_map) {
+            const auto& stats = kv.second;
+            pcl::PointXYZI pt;
+            pt.x = stats.sum_xyz.x() / stats.count;
+            pt.y = stats.sum_xyz.y() / stats.count;
+            pt.z = stats.sum_xyz.z() / stats.count;
+            pt.intensity = stats.max_conf;
+            out.push_back(pt);
+        }
+    }   
 
     void BGKLVCOctoMap::beam_sample(const point3f &hit, const point3f &origin, PointCloud &frees,
                                 float free_resolution) const {
