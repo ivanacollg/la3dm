@@ -120,6 +120,7 @@ include_directories(
         include/bgkoctomap
         include/bgkloctomap
 	include/bgklvoctomap
+        include/bgklvcoctomap
         include/common
         ${catkin_INCLUDE_DIRS}
         ${OCTOMAP_INCLUDE_DIRS}
@@ -135,7 +136,15 @@ set(COMMON_SOURCE_FILES
   src/common/point3f.cpp
   src/common/point6f.cpp)
 
-# Files for BGKL source
+# Files for BGKLVC source
+set(BGKLVC_SOURCE_FILES
+  src/bgklvcoctomap/bgklvcblock.cpp
+  src/bgklvcoctomap/bgklvcoctomap.cpp
+  src/bgklvcoctomap/bgklvcoctree_node.cpp
+  src/bgklvcoctomap/bgklvcoctree.cpp
+)
+
+# Files for BGKLV source
 set(BGKLV_SOURCE_FILES
   src/bgklvoctomap/bgklvblock.cpp
   src/bgklvoctomap/bgklvoctomap.cpp
@@ -167,6 +176,12 @@ set(GP_SOURCE_FILES
   src/gpoctomap/gpoctree.cpp
 )
 
+add_executable(bgklvcoctomap_static_node
+    ${BGKLVC_SOURCE_FILES}
+    ${COMMON_SOURCE_FILES}
+    src/bgklvcoctomap/bgklvcoctomap_static_node.cpp
+)
+
 add_executable(bgklvoctomap_static_node
     ${BGKLV_SOURCE_FILES}
     ${COMMON_SOURCE_FILES}
@@ -189,6 +204,12 @@ add_executable(gpoctomap_static_node
     ${GP_SOURCE_FILES}
     ${COMMON_SOURCE_FILES}
     src/gpoctomap/gpoctomap_static_node.cpp
+)
+
+add_executable(bgklvcoctomap_server
+    ${BGKLVC_SOURCE_FILES}
+    ${COMMON_SOURCE_FILES}
+    src/bgklvcoctomap/bgklvcoctomap_server.cpp
 )
 
 add_executable(bgklvoctomap_server
@@ -220,6 +241,10 @@ add_executable(gpoctomap_server
 # add_dependencies(BGKOctoMap_node BGKOctoMap_generate_messages_cpp)
 
 ## Specify libraries to link a library or executable target against
+target_link_libraries(bgklvcoctomap_static_node
+        ${catkin_LIBRARIES}
+)
+
 target_link_libraries(bgklvoctomap_static_node
         ${catkin_LIBRARIES}
 )
@@ -233,6 +258,9 @@ target_link_libraries(bgkoctomap_static_node
 )
 
 target_link_libraries(gpoctomap_static_node
+        ${catkin_LIBRARIES}
+)
+target_link_libraries(bgklvcoctomap_server
         ${catkin_LIBRARIES}
 )
 
