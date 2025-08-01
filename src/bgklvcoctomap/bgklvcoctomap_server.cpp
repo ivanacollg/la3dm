@@ -10,7 +10,7 @@ tf::TransformListener *listener;
 std::string frame_id("map");
 la3dm::BGKLVCOctoMap *map;
 
-la3dm::MarkerArrayPub *m_pub_occ, *m_pub_free;
+la3dm::MarkerArrayPub *m_pub_occ, *m_pub_free, *m_pub_uncertain;
 
 tf::Vector3 last_position;
 tf::Quaternion last_orientation;
@@ -22,6 +22,7 @@ bool updated = false;
 //Universal parameters
 std::string map_topic_occ("/occupied_cells_vis_array");
 std::string map_topic_free("/free_cells_vis_array");
+std::string map_topic_uncertain("/uncertain_cells_vis_array");
 double max_range = -1;
 double resolution = 0.1;
 int block_depth = 4;
@@ -89,6 +90,7 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
 
         m_pub_occ->clear();
         m_pub_free->clear();
+        m_pub_uncertain->clear();
 
         for (auto it = map->begin_leaf(); it != map->end_leaf(); ++it) {
 
@@ -97,7 +99,8 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
             if (it.get_node().get_state() == la3dm::State::OCCUPIED) {
                 if (original_size) 
                 {
-                    m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
+                    //m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
+                    m_pub_occ->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
                 } 
                 else 
                 {
@@ -112,7 +115,8 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
             {
                 if (original_size) 
                 {
-                    m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
+                    //m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
+                    m_pub_free->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
                 } 
                 else 
                 {
@@ -124,11 +128,29 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 }
                 
             }
+            else if(it.get_node().get_state() == la3dm::State::UNCERTAIN)
+            {
+                if (original_size) 
+                {
+                    //m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
+                    m_pub_uncertain->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                } 
+                else 
+                {
+                    auto pruned = it.get_pruned_locs();
+                    for (auto n = pruned.cbegin(); n < pruned.cend(); ++n) 
+                    {
+                        m_pub_uncertain->insert_point3d(n->x(), n->y(), n->z(), min_z, max_z, map->get_resolution(), it.get_node().get_prob());
+                    }
+                }
+                
+            }
         }
         updated = false;
 
         m_pub_free->publish();
         m_pub_occ->publish();
+        m_pub_uncertain->publish();
 
         ros::Time end2 = ros::Time::now();
         ROS_INFO_STREAM("One map published in " << (end2 - start2).toSec() << "s");
@@ -144,6 +166,7 @@ int main(int argc, char **argv) {
     //Universal parameters
     nh.param<std::string>("topic", map_topic_occ, map_topic_occ);
     nh.param<std::string>("topic_free", map_topic_free, map_topic_free);
+    nh.param<std::string>("topic_uncertain", map_topic_uncertain, map_topic_uncertain);
     nh.param<double>("max_range", max_range, max_range);
     nh.param<double>("resolution", resolution, resolution);
     nh.param<int>("block_depth", block_depth, block_depth);
@@ -188,6 +211,8 @@ int main(int argc, char **argv) {
     ros::Subscriber point_sub = nh.subscribe<sensor_msgs::PointCloud2>(cloud_topic, 1, cloudHandler);
     m_pub_occ = new la3dm::MarkerArrayPub(nh, map_topic_occ, resolution);
     m_pub_free = new la3dm::MarkerArrayPub(nh, map_topic_free, resolution);
+    m_pub_uncertain = new la3dm::MarkerArrayPub(nh, map_topic_uncertain, resolution);
+
 
     listener = new tf::TransformListener();
     

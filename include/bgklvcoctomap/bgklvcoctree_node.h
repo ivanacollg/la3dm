@@ -4,13 +4,9 @@
 #include <iostream>
 #include <fstream>
 #include <cmath>
+#include "state.h"
 
 namespace la3dm {
-
-    /// Occupancy state: before pruning: FREE, OCCUPIED, UNKNOWN, UNCERTAIN; after pruning: PRUNED
-    enum class State : char {
-        FREE, OCCUPIED, UNKNOWN, UNCERTAIN, PRUNED
-    };
 
     /*
      * @brief Inference ouputs and occupancy state.

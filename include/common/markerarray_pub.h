@@ -4,8 +4,10 @@
 #include <visualization_msgs/Marker.h>
 #include <std_msgs/ColorRGBA.h>
 
+
 #include <cmath>
 #include <string>
+#include "state.h"
 
 namespace la3dm {
     
@@ -166,6 +168,51 @@ namespace la3dm {
             double h = (1.0 - std::min(std::max((v - min_v) / (max_v - min_v), 0.0), 1.0)) * 0.8;
             msg->markers[depth].colors.push_back(heightMapColor(h));
         }
+
+        void insert_state_point3d(float x, float y, float z, State state) {
+            geometry_msgs::Point center;
+            center.x = x;
+            center.y = y;
+            center.z = z;
+
+            int depth = 0;
+            msg->markers[depth].points.push_back(center);
+            
+            std_msgs::ColorRGBA color;
+            color.a = 1.0;  // fully opaque
+
+            switch (state) {
+                case State::OCCUPIED: // Red
+                    color.r = 1.0;
+                    color.g = 0.0;
+                    color.b = 0.0;
+                    break;
+                case State::FREE: // Green
+                    color.r = 0.0;
+                    color.g = 1.0;
+                    color.b = 0.0;
+                    break;
+                case State::UNKNOWN:  //Blue 
+                    color.a = 0.01;                   
+                    color.r = 0.0;
+                    color.g = 0.0;
+                    color.b = 1.0;
+                    break;
+                case State::PRUNED: // Yellow                     
+                    color.r = 1.0;
+                    color.g = 1.0;
+                    color.b = 0.0;
+                    break;
+                default: //State::UNCERTAIN: // Purple/Magenta
+                    color.r = 1.0;
+                    color.g = 0.0;
+                    color.b = 1.0;
+                    break;
+            }
+            msg->markers[depth].colors.push_back(color);
+        }
+
+
 
         void clear() {
             for (int i = 0; i < 10; ++i) {
