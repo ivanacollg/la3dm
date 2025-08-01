@@ -100,7 +100,8 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     //m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
-                    m_pub_occ->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    //m_pub_occ->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    m_pub_occ->insert_color_point3d(p.x(), p.y(), p.z(), -1.0, 1.0, it.get_node().get_prob());
                 } 
                 else 
                 {
@@ -116,7 +117,8 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     //m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
-                    m_pub_free->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    //m_pub_free->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    m_pub_free->insert_color_point3d(p.x(), p.y(), p.z(), -1.0, 1.0, it.get_node().get_prob());
                 } 
                 else 
                 {
@@ -132,8 +134,9 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
             {
                 if (original_size) 
                 {
-                    //m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
-                    m_pub_uncertain->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    //m_pub_uncertain->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
+                    //m_pub_uncertain->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    m_pub_uncertain->insert_color_point3d(p.x(), p.y(), p.z(), -1.0, 1.0, it.get_node().get_prob());
                 } 
                 else 
                 {

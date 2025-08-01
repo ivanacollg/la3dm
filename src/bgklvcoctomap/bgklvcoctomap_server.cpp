@@ -6,6 +6,8 @@
 #include "markerarray_pub.h"
 #include "bgklvcoctomap.h"
 
+
+
 tf::TransformListener *listener;
 std::string frame_id("map");
 la3dm::BGKLVCOctoMap *map;
@@ -41,6 +43,23 @@ float var_thresh = 1.0f;
 float prior_A = 1.0f;
 float prior_B = 1.0f;
 float min_W = 0.1f;
+
+void save_csv_xyz(const std::string &filename, const std::vector<std::array<float, 3>> &points) {
+    std::ofstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Failed to open " << filename << " for writing." << std::endl;
+        return;
+    }
+
+    // Optional: write header
+    file << "x,y,z\n";
+
+    for (const auto &p : points) {
+        file << p[0] << "," << p[1] << "," << p[2] << "\n";
+    }
+
+    file.close();
+}
 
 void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
     
@@ -92,6 +111,9 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
         m_pub_free->clear();
         m_pub_uncertain->clear();
 
+        // pointcloud to be saved
+        std::vector<std::array<float, 3>> cloud_pts;
+
         for (auto it = map->begin_leaf(); it != map->end_leaf(); ++it) {
 
             la3dm::point3f p = it.get_loc();
@@ -100,7 +122,10 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     //m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
-                    m_pub_occ->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    //m_pub_occ->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    m_pub_occ->insert_color_point3d(p.x(), p.y(), p.z(), -0.1, 1.0, it.get_node().get_prob());
+
+                    cloud_pts.push_back({p.x(), p.y(), p.z()});
                 } 
                 else 
                 {
@@ -116,7 +141,8 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     //m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
-                    m_pub_free->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    //m_pub_free->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    m_pub_free->insert_color_point3d(p.x(), p.y(), p.z(), -0.1, 1.0, it.get_node().get_prob());
                 } 
                 else 
                 {
@@ -133,7 +159,8 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     //m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
-                    m_pub_uncertain->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    //m_pub_uncertain->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
+                    m_pub_uncertain->insert_color_point3d(p.x(), p.y(), p.z(), -0.1, 1.0, it.get_node().get_prob());
                 } 
                 else 
                 {
@@ -151,6 +178,9 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
         m_pub_free->publish();
         m_pub_occ->publish();
         m_pub_uncertain->publish();
+
+        // Convert to Numpy format: shape [N, 3]
+        save_csv_xyz("map_output.csv", cloud_pts);
 
         ros::Time end2 = ros::Time::now();
         ROS_INFO_STREAM("One map published in " << (end2 - start2).toSec() << "s");
