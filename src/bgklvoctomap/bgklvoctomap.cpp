@@ -355,9 +355,9 @@ namespace la3dm {
                 }
                 
                 //include free space near the floor (by removing floor points from nearby, currently using x-y plane as floor)
-                if(p.z() > (offset+origin.z()) && p0.z() < origin.z()+influence){
-                    continue;
-                }
+                //if(p.z() > (offset+origin.z()) && p0.z() < origin.z()+influence){
+                //    continue;
+                //}
 
                 double dist1 = (free_endpt-p0).norm();
                 double dist2 = (origin-p0).norm();
@@ -392,9 +392,9 @@ namespace la3dm {
             }
 
             //remove downward rays close to sensor
-            if(l < max_range/5.0 && l/(offset-nearest_point.z()) > 0){
-               continue;
-            }
+            //if(l < max_range/5.0 && l/(offset-nearest_point.z()) > 0){
+            //   continue;
+            //}
 
             free_endpt = point3f(origin.x() + nx * l, origin.y() + ny * l, origin.z() + nz * l);
             point3f free_origin = origin;

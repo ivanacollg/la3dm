@@ -18,6 +18,7 @@ namespace la3dm {
         using MatrixKType = Eigen::Matrix<T, -1, -1, Eigen::RowMajor>;
         using MatrixDKType = Eigen::Matrix<T, -1, 1>;
         using MatrixYType = Eigen::Matrix<T, -1, 1>;
+        using MatrixCType = Eigen::Matrix<T, -1, 1>;
 
         float EPSILON = 0.0001;
 
@@ -28,11 +29,12 @@ namespace la3dm {
          * @param x input vector (3N, row major)
          * @param y target vector (N)
          */
-        void train(const std::vector<T> &x, const std::vector<T> &y) {
+        void train(const std::vector<T> &x, const std::vector<T> &y, const std::vector<T> &c) {
             assert(x.size() % (2*dim) == 0 && (int) (x.size() / (2*dim)) == y.size());
             MatrixXType _x = Eigen::Map<const MatrixXType>(x.data(), x.size() / (2*dim), 2*dim);
             MatrixYType _y = Eigen::Map<const MatrixYType>(y.data(), y.size(), 1);
-            train(_x, _y);
+            MatrixCType _c = Eigen::Map<const MatrixYType>(c.data(), c.size(), 1);
+            train(_x, _y, _c);
         }
 
         /*
@@ -40,10 +42,11 @@ namespace la3dm {
          * @param x input matrix (NX3)
          * @param y target matrix (NX1)
          */
-        void train(const MatrixXType &x, const MatrixYType &y) {
+        void train(const MatrixXType &x, const MatrixYType &y, const MatrixCType &c) {
             // std::cout << "training pt2" << std::endl;
             this->xt = MatrixXType(x);
             this->yt = MatrixYType(y);
+            this->ct = MatrixYType(c);
             trained = true;
         }
 
@@ -77,7 +80,7 @@ namespace la3dm {
             // std::cout << "second prediction step" << std::endl;
             assert(trained == true);
 	        MatrixKType Ks;
-        	covSparseLine(xs, xt, Ks);
+        	covSparseLine(xs, xt, ct, Ks);
             // std::cout << "computed covsparseline" << std::endl;
         	ybar = (Ks * yt).array();
         	kbar = Ks.rowwise().sum().array();
@@ -112,7 +115,7 @@ namespace la3dm {
                     line_len = line_vec.norm(); // length of ray
                     pnt_vec = p - p0;
                     if (line_len < EPSILON) { // if ray is basicly zero 
-                        d(i,j) = (p-p0).norm(); // return distande to ray origin (probably a hit point)
+                        d(i,j) = (p-p0).norm(); // return distance to ray origin (probably a hit point)
                     }
                     else {
                         double c1 = pnt_vec.dot(line_vec);
@@ -140,7 +143,7 @@ namespace la3dm {
          * @return Kxz covariance matrix
          * @ref A sparse covariance function for exact gaussian process inference in large datasets.
          */
-        void covSparseLine(const MatrixPType &x, const MatrixXType &z, MatrixKType &Kxz) const {
+        void covSparseLine(const MatrixPType &x, const MatrixXType &z, const MatrixCType &z_conf, MatrixKType &Kxz) const {
             point_to_line_dist(x, z, Kxz); // Check on this
             Kxz /= ell; // divide distance by l kernel region of influence
             // if covariance is above one, truncate to one
@@ -149,11 +152,11 @@ namespace la3dm {
                 for (int j = 0; j < Kxz.cols(); ++j)
                     if (Kxz(i,j) > 1.0)
                         Kxz(i,j) = 1.0f;
-            }
+            }       
 
             //sparse kernel function
-            Kxz = (((2.0f + (Kxz * 2.0f * 3.1415926f).array().cos()) * (1.0f - Kxz.array()) / 3.0f) + (Kxz * 2.0f * 3.1415926f).array().sin() / (2.0f * 3.1415926f)).matrix() * sf2;
-            
+            Kxz = ((((2.0f + (Kxz * 2.0f * 3.1415926f).array().cos()) * (1.0f - Kxz.array()) / 3.0f) + (Kxz * 2.0f * 3.1415926f).array().sin() / (2.0f * 3.1415926f)).matrix()).array() * z_conf.transpose().array();
+        
         }
 
         T sf2;    // signal variance
@@ -161,6 +164,7 @@ namespace la3dm {
 
         MatrixXType xt;   // temporary storage of training data
         MatrixYType yt;   // temporary storage of training labels
+        MatrixCType ct;   // temporary storage of training confidences
 
         bool trained;    // true if bgklvinference stored training data
     };

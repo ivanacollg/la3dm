@@ -373,7 +373,7 @@ namespace la3dm {
 
         /// Get training data from one sensor scan.
         void get_training_data(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
-                               float free_resolution, float max_range, GPLineCloud &xy, GPLineCloud &rays, std::vector<int> &ray_idx) const;
+                               float free_resolution, float max_range, GPLineCloud &xy, std::vector<float> &confidence_vec, GPLineCloud &rays, std::vector<int> &ray_idx) const;
 
         float resolution;
         float block_size;

@@ -8,8 +8,8 @@ max_range: 3 # Sensor max range (m)
 original_size: true
 
 # Bounds on map height
-min_z: -2.0
-max_z: 2.0
+min_z: -0.5
+max_z: 2.25
 
 # Kernel parameters
 sf2: 0.1

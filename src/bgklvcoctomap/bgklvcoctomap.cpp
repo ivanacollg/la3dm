@@ -97,13 +97,14 @@ namespace la3dm {
         /////////////////////////////////////////////////
         GPLineCloud xy;
         GPLineCloud rays;
+        vector<float> confidence_vec;
         vector<int> ray_idx;
 
         if(ds_resolution > resolution){
             ds_resolution = resolution;
         }
 
-        get_training_data(cloud, origin, ds_resolution, free_res, max_range, xy, rays, ray_idx);
+        get_training_data(cloud, origin, ds_resolution, free_res, max_range, xy, confidence_vec, rays, ray_idx);
         assert (ray_idx.size() == xy.size());
 
 #ifdef DEBUG
@@ -175,7 +176,7 @@ namespace la3dm {
                     continue;
 
                 vector<int> ray_keys(rays.size(), 0); //rays.size number of 0's
-                vector<float> block_x, block_y;
+                vector<float> block_x, block_y, block_c;
 
 #ifdef OPENMP
 #pragma omp critical
@@ -190,6 +191,7 @@ namespace la3dm {
                         block_x.push_back(xy[xy_idx[j]].first.x0());
                         block_x.push_back(xy[xy_idx[j]].first.y0());
                         block_x.push_back(xy[xy_idx[j]].first.z0());
+                        block_c.push_back(confidence_vec[xy_idx[j]]);
                         block_y.push_back(1.0f);
                     }
                     else if (ray_keys[ray_idx[xy_idx[j]]] == 0) { // add free space rays
@@ -200,6 +202,7 @@ namespace la3dm {
                         block_x.push_back(rays[ray_idx[xy_idx[j]]].first.x1());
                         block_x.push_back(rays[ray_idx[xy_idx[j]]].first.y1());
                         block_x.push_back(rays[ray_idx[xy_idx[j]]].first.z1());
+                        block_c.push_back(confidence_vec[xy_idx[j]]);
                         block_y.push_back(0.0f);
                     }
 
@@ -209,7 +212,7 @@ namespace la3dm {
 
                 //push training data into node (legacy code, used to push into block)
                 BGKLVC3f *bgklv = new BGKLVC3f(OcTreeNode::sf2, OcTreeNode::ell);
-                bgklv->train(block_x, block_y);
+                bgklv->train(block_x, block_y, block_c);
 
 #ifdef DEBUG
         Debug_Msg("Training done");
@@ -302,7 +305,7 @@ namespace la3dm {
 
     //method to build training dataset from raw pointcloud data
 void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
-                                      float free_resolution, float max_range, GPLineCloud &xy, GPLineCloud &rays, vector<int> &ray_idx) const {
+                                      float free_resolution, float max_range, GPLineCloud &xy, vector<float> &confidence_vec, GPLineCloud &rays, vector<int> &ray_idx) const {
         //downsample all incoming data
         PCLPointCloud sampled_hits;
         downsample(cloud, sampled_hits, ds_resolution);
@@ -316,6 +319,7 @@ void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f 
         // Iterate though each hit point
         for (auto it = sampled_hits.begin(); it != sampled_hits.end(); ++it) {
             point3f p(it->x, it->y, it->z);
+            float intensity = (it->intensity)/1000.0; // Scale confidence to percentage scale
             double l = (p - origin).norm();
             // Computes a normalized ray direction from the origin (sensor location) to the hit point.
             float nx = (p.x() - origin.x()) / l;
@@ -329,6 +333,7 @@ void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f 
                     l = (float) sqrt((p.x() - origin.x()) * (p.x() - origin.x()) + (p.y() - origin.y()) * (p.y() - origin.y()) + (p.z() - origin.z()) * (p.z() - origin.z()));
                     l = l-offset;
                     xy.emplace_back(point6f(p), 1.0f);
+                    confidence_vec.push_back(intensity);
                     ray_idx.push_back(-1);
                 }
                 else{
@@ -355,9 +360,9 @@ void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f 
                 }
                 
                 //include free space near the floor (by removing floor points from nearby, currently using x-y plane as floor)
-                if(p.z() > (offset+origin.z()) && p0.z() < origin.z()+influence){
-                    continue;
-                }
+                //if(p.z() > (offset+origin.z()) && p0.z() < origin.z()+influence){
+                //    continue;
+                //}
 
                 double dist1 = (free_endpt-p0).norm();
                 double dist2 = (origin-p0).norm();
@@ -392,9 +397,9 @@ void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f 
             }
 
             //remove downward rays close to sensor
-            if(l < max_range/5.0 && l/(offset-nearest_point.z()) > 0){
-               continue;
-            }
+            //if(l < max_range/5.0 && l/(offset-nearest_point.z()) > 0){
+            //   continue;
+            //}
 
             free_endpt = point3f(origin.x() + nx * l, origin.y() + ny * l, origin.z() + nz * l);
             point3f free_origin = origin;
@@ -407,17 +412,26 @@ void BGKLVCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f 
             else{
                 free_origin = free_endpt;
             }
+            
+            if(intensity!= 0.8) // If intensity is not equal to stereo sonar only intensity
+            {
+                PointCloud frees;
+                beam_sample(free_endpt, free_origin, frees, free_resolution);
 
-            PointCloud frees;
-            beam_sample(free_endpt, free_origin, frees, free_resolution);
-
-            xy.emplace_back(point6f(free_origin.x(), free_origin.y(), free_origin.z()), 0.0f);
-            ray_idx.push_back(idx);
-
-            //plaxeholder points along the ray used to check if a ray is near a cell -> yes means use this ray
-            for (auto p = frees.begin(); p != frees.end(); ++p) {
-                xy.emplace_back(point6f(p->x(), p->y(), p->z()), 0.0f);
+                xy.emplace_back(point6f(free_origin.x(), free_origin.y(), free_origin.z()), 0.0f);
+                confidence_vec.push_back(intensity);
                 ray_idx.push_back(idx);
+
+                //placeholder points along the ray used to check if a ray is near a cell -> yes means use this ray
+                for (auto p = frees.begin(); p != frees.end(); ++p) {
+                    xy.emplace_back(point6f(p->x(), p->y(), p->z()), 0.0f);
+                    confidence_vec.push_back(intensity);
+                    ray_idx.push_back(idx);
+                }
+            }
+            else
+            {
+                std::cout<< "stereo sonar" << std::endl;
             }
 
             point6f line6f(free_origin, free_endpt);
