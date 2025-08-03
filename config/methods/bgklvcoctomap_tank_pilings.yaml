@@ -2,7 +2,7 @@
 
 # Map topic, grid cell mininum resolution
 topic: /occupied_cells_vis_array
-resolution: 0.025
+resolution: 0.02
 block_depth: 1 # Test-data octree depth (see Wang & Englot ICRA 2016)
 max_range: 3 # Sensor max range (m)
 original_size: true

@@ -24,7 +24,7 @@
     <node pkg="la3dm" type="$(arg method)_server" name="la3dm_server" output="screen">
 
         <!-- Load method configuration from file -->
-        <rosparam file="$(arg method_config)/$(arg method)_marina.yaml" command="load"/>
+        <rosparam file="$(arg method_config)/$(arg method)_tank_disks.yaml" command="load"/>
         
     </node>
 
