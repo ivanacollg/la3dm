@@ -192,9 +192,9 @@ namespace la3dm {
                     color.g = 1.0;
                     color.b = 0.0;
                     break;
-                case State::UNKNOWN:  //Blue 
+                case State::UNKNOWN:  //Magenta
                     color.a = 0.01;                   
-                    color.r = 0.0;
+                    color.r = 1.0;
                     color.g = 0.0;
                     color.b = 1.0;
                     break;
@@ -203,8 +203,8 @@ namespace la3dm {
                     color.g = 1.0;
                     color.b = 0.0;
                     break;
-                default: //State::UNCERTAIN: // Purple/Magenta
-                    color.r = 1.0;
+                default: //State::UNCERTAIN: // Blue
+                    color.r = 0.0;
                     color.g = 0.0;
                     color.b = 1.0;
                     break;

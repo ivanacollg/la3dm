@@ -4,15 +4,13 @@
 #include <pcl_ros/transforms.h>
 #include <pcl/filters/voxel_grid.h>
 #include "markerarray_pub.h"
-#include "bgklvcoctomap.h"
-
-
+#include "gpcoctomap.h"
 
 tf::TransformListener *listener;
-std::string frame_id("map");
-la3dm::BGKLVCOctoMap *map;
+std::string frame_id("/map");
+la3dm::GPCOctoMap *map;
 
-la3dm::MarkerArrayPub *m_pub_occ, *m_pub_free, *m_pub_uncertain;
+la3dm::MarkerArrayPub *m_pub_occ, *m_pub_free;
 
 tf::Vector3 last_position;
 tf::Quaternion last_orientation;
@@ -24,12 +22,11 @@ bool updated = false;
 //Universal parameters
 std::string map_topic_occ("/occupied_cells_vis_array");
 std::string map_topic_free("/free_cells_vis_array");
-std::string map_topic_uncertain("/uncertain_cells_vis_array");
 double max_range = -1;
 double resolution = 0.1;
 int block_depth = 4;
-double sf2 = 0.1;
-double ell = 0.2;
+double sf2 = 1.0;
+double ell = 1.0;
 double free_resolution = 0.1;
 double ds_resolution = 0.1;
 double free_thresh = 0.3;
@@ -38,28 +35,12 @@ double min_z = 0;
 double max_z = 0;
 bool original_size = true;
 
-//BGKLVC parameters
-float var_thresh = 1.0f;
-float prior_A = 1.0f;
-float prior_B = 1.0f;
-float min_W = 0.1f;
-
-void save_csv_xyz(const std::string &filename, const std::vector<std::array<float, 3>> &points) {
-    std::ofstream file(filename);
-    if (!file.is_open()) {
-        std::cerr << "Failed to open " << filename << " for writing." << std::endl;
-        return;
-    }
-
-    // Optional: write header
-    file << "x,y,z\n";
-
-    for (const auto &p : points) {
-        file << p[0] << "," << p[1] << "," << p[2] << "\n";
-    }
-
-    file.close();
-}
+//parameters for GPCOctomap
+double noise = 0.01;
+double l = 100;
+double min_var = 0.001;
+double max_var = 1000;
+double max_known_var = 0.02;
 
 void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
     
@@ -93,8 +74,15 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
         la3dm::PCLPointCloud::Ptr pcl_cloud (new la3dm::PCLPointCloud());
         pcl::fromROSMsg(cloud_map, *pcl_cloud);
 
-        if(pcl_cloud->size() > 5){
-            map->insert_pointcloud(*pcl_cloud, origin, (float) ds_resolution, (float) free_resolution, (float) max_range);
+        //downsample for faster mapping
+        la3dm::PCLPointCloud filtered_cloud;
+        pcl::VoxelGrid<pcl::PointXYZ> filterer;
+        filterer.setInputCloud(pcl_cloud);
+        filterer.setLeafSize(ds_resolution, ds_resolution, ds_resolution);
+        filterer.filter(filtered_cloud);
+
+        if(filtered_cloud.size() > 5){
+            map->insert_pointcloud(filtered_cloud, origin, (float) resolution, (float) free_resolution, (float) max_range);
         }
 
         ros::Time end = ros::Time::now();
@@ -109,10 +97,6 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
 
         m_pub_occ->clear();
         m_pub_free->clear();
-        m_pub_uncertain->clear();
-
-        // pointcloud to be saved
-        std::vector<std::array<float, 3>> cloud_pts;
 
         for (auto it = map->begin_leaf(); it != map->end_leaf(); ++it) {
 
@@ -122,10 +106,6 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
-                    //m_pub_occ->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
-                    //m_pub_occ->insert_color_point3d(p.x(), p.y(), p.z(), -0.1, 1.0, it.get_node().get_prob());
-
-                    cloud_pts.push_back({p.x(), p.y(), p.z()});
                 } 
                 else 
                 {
@@ -141,8 +121,6 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
-                    //m_pub_free->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
-                    //m_pub_free->insert_color_point3d(p.x(), p.y(), p.z(), -0.1, 1.0, it.get_node().get_prob());
                 } 
                 else 
                 {
@@ -154,33 +132,12 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 }
                 
             }
-            else if(it.get_node().get_state() == la3dm::State::UNCERTAIN)
-            {
-                if (original_size) 
-                {
-                    m_pub_uncertain->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
-                    //m_pub_uncertain->insert_state_point3d(p.x(), p.y(), p.z(), it.get_node().get_state());
-                    //m_pub_uncertain->insert_color_point3d(p.x(), p.y(), p.z(), -0.1, 1.0, it.get_node().get_prob());
-                } 
-                else 
-                {
-                    auto pruned = it.get_pruned_locs();
-                    for (auto n = pruned.cbegin(); n < pruned.cend(); ++n) 
-                    {
-                        m_pub_uncertain->insert_point3d(n->x(), n->y(), n->z(), min_z, max_z, map->get_resolution(), it.get_node().get_prob());
-                    }
-                }
-                
-            }
+            
         }
         updated = false;
 
-        m_pub_free->publish();
         m_pub_occ->publish();
-        m_pub_uncertain->publish();
-
-        // Convert to Numpy format: shape [N, 3]
-        save_csv_xyz("map_output.csv", cloud_pts);
+        m_pub_free->publish();
 
         ros::Time end2 = ros::Time::now();
         ROS_INFO_STREAM("One map published in " << (end2 - start2).toSec() << "s");
@@ -188,15 +145,15 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
 }
 
 int main(int argc, char **argv) {
-    ros::init(argc, argv, "bgklvcoctomap_server");
+    ros::init(argc, argv, "gpcoctomap_server");
     ros::NodeHandle nh("~");
     //incoming pointcloud topic, this could be put into the .yaml too
     std::string cloud_topic("/sonar_camera_merge/cloud");
 
+
     //Universal parameters
     nh.param<std::string>("topic", map_topic_occ, map_topic_occ);
     nh.param<std::string>("topic_free", map_topic_free, map_topic_free);
-    nh.param<std::string>("topic_uncertain", map_topic_uncertain, map_topic_uncertain);
     nh.param<double>("max_range", max_range, max_range);
     nh.param<double>("resolution", resolution, resolution);
     nh.param<int>("block_depth", block_depth, block_depth);
@@ -210,11 +167,12 @@ int main(int argc, char **argv) {
     nh.param<double>("max_z", max_z, max_z);
     nh.param<bool>("original_size", original_size, original_size);
 
-    //BKGLV parameters
-    nh.param<float>("var_thresh", var_thresh, var_thresh);
-    nh.param<float>("prior_A", prior_A, prior_A);
-    nh.param<float>("prior_B", prior_B, prior_B);
-    nh.param<float>("min_W", min_W, min_W);
+    //parameters for GPCOctomap
+    nh.param<double>("noise", noise, noise);
+    nh.param<double>("l", l, l);
+    nh.param<double>("min_var", min_var, min_var);
+    nh.param<double>("max_var", max_var, max_var);
+    nh.param<double>("max_known_var", max_known_var, max_known_var);
 
     ROS_INFO_STREAM("Parameters:" << std::endl <<
             "topic: " << map_topic_occ << std::endl <<
@@ -223,26 +181,24 @@ int main(int argc, char **argv) {
             "block_depth: " << block_depth << std::endl <<
             "sf2: " << sf2 << std::endl <<
             "ell: " << ell << std::endl <<
+            "l: " << l << std::endl <<
+            "min_var: " << min_var << std::endl <<
+            "max_var: " << max_var << std::endl <<
+            "max_known_var: " << max_known_var << std::endl <<
             "free_resolution: " << free_resolution << std::endl <<
             "ds_resolution: " << ds_resolution << std::endl <<
             "free_thresh: " << free_thresh << std::endl <<
             "occupied_thresh: " << occupied_thresh << std::endl <<
             "min_z: " << min_z << std::endl <<
             "max_z: " << max_z << std::endl <<
-            "original_size: " << original_size << std::endl <<
-            "var_thresh: " << var_thresh << std::endl <<
-            "prior_A: " << prior_A << std::endl <<
-            "prior_B: " << prior_B << std::endl <<
-            "min_W: " << min_W
+            "original_size: " << original_size
             );
 
-    map = new la3dm::BGKLVCOctoMap(resolution, block_depth, sf2, ell, free_thresh, occupied_thresh, var_thresh, prior_A, prior_B, original_size, min_W);
+    map = new la3dm::GPCOctoMap(resolution, block_depth, sf2, ell, noise, l, min_var, max_var, max_known_var, free_thresh, occupied_thresh);
     
     ros::Subscriber point_sub = nh.subscribe<sensor_msgs::PointCloud2>(cloud_topic, 1, cloudHandler);
     m_pub_occ = new la3dm::MarkerArrayPub(nh, map_topic_occ, resolution);
     m_pub_free = new la3dm::MarkerArrayPub(nh, map_topic_free, resolution);
-    m_pub_uncertain = new la3dm::MarkerArrayPub(nh, map_topic_uncertain, resolution);
-
 
     listener = new tf::TransformListener();
     

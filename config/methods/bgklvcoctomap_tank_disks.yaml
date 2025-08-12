@@ -13,10 +13,10 @@ max_z: 2.25
 
 # Kernel parameters
 sf2: 0.1
-ell: 0.05
+ell: 0.025
 
 # Sampling resolutions
-free_resolution: 0.025
+free_resolution: 0.1
 ds_resolution: 0.025  # Downsampling factor
 
 # Free/Occupied Thresholds
@@ -29,3 +29,10 @@ prior_B: 0.001 # Negative class (unoccupied)
 min_W: 0.001 #minimum unknown threshold
 var_thresh: 0.1 # Threshold on variance to distinguish known/unknown
 
+
+# GP parameters
+noise: 0.01
+l: 100
+max_var: 1000
+min_var: 0.001
+max_known_var: 00.02

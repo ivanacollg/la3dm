@@ -148,7 +148,8 @@ int main(int argc, char **argv) {
     ros::init(argc, argv, "bgkloctomap_server");
     ros::NodeHandle nh("~");
     //incoming pointcloud topic, this could be put into the .yaml too
-    std::string cloud_topic("/velodyne_points");
+    std::string cloud_topic("/sonar_camera_merge/cloud");
+
 
     //Universal parameters
     nh.param<std::string>("topic", map_topic_occ, map_topic_occ);

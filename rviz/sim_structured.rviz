@@ -7,8 +7,9 @@ Panels:
         - /PointCloud21/Autocompute Value Bounds1
         - /TF1/Frames1
         - /TF1/Tree1
+        - /Odometry2/Shape1
       Splitter Ratio: 0.5
-    Tree Height: 719
+    Tree Height: 418
   - Class: rviz/Selection
     Name: Selection
   - Class: rviz/Tool Properties
@@ -26,7 +27,7 @@ Panels:
   - Class: rviz/Time
     Name: Time
     SyncMode: 0
-    SyncSource: ""
+    SyncSource: Veritcal Sonar
 Preferences:
   PromptSaveOnExit: true
 Toolbars:
@@ -85,7 +86,7 @@ Visualization Manager:
       Marker Topic: /occupied_cells_vis_array
       Name: Occupied
       Namespaces:
-        {}
+        map: true
       Queue Size: 100
       Value: true
     - Class: rviz/MarkerArray
@@ -127,7 +128,13 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: true
+        base_link:
+          Value: true
         map:
+          Value: true
+        odom:
+          Value: true
+        velodyne:
           Value: true
         world:
           Value: true
@@ -139,6 +146,10 @@ Visualization Manager:
       Show Names: true
       Tree:
         map:
+          odom:
+            base_link:
+              velodyne:
+                {}
           world:
             {}
       Update Interval: 0
@@ -203,6 +214,124 @@ Visualization Manager:
       Transport Hint: raw
       Unreliable: false
       Value: true
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 1
+      Name: Odometry
+      Position Tolerance: 0.10000000149011612
+      Queue Size: 10
+      Shape:
+        Alpha: 1
+        Axes Length: 1
+        Axes Radius: 0.10000000149011612
+        Color: 255; 25; 0
+        Head Length: 0.30000001192092896
+        Head Radius: 0.10000000149011612
+        Shaft Length: 1
+        Shaft Radius: 0.05000000074505806
+        Value: Arrow
+      Topic: /bruce/slam/localization/odom
+      Unreliable: false
+      Value: true
+    - Angle Tolerance: 0.10000000149011612
+      Class: rviz/Odometry
+      Covariance:
+        Orientation:
+          Alpha: 0.5
+          Color: 255; 255; 127
+          Color Style: Unique
+          Frame: Local
+          Offset: 1
+          Scale: 1
+          Value: true
+        Position:
+          Alpha: 0.30000001192092896
+          Color: 204; 51; 204
+          Scale: 1
+          Value: true
+        Value: true
+      Enabled: true
+      Keep: 1
+      Name: Odometry
+      Position Tolerance: 0.10000000149011612
+      Queue Size: 10
+      Shape:
+        Alpha: 1
+        Axes Length: 1
+        Axes Radius: 0.10000000149011612
+        Color: 92; 53; 102
+        Head Length: 0.30000001192092896
+        Head Radius: 0.10000000149011612
+        Shaft Length: 1
+        Shaft Radius: 0.05000000074505806
+        Value: Arrow
+      Topic: /bruce/slam/slam/odom
+      Unreliable: false
+      Value: true
+    - Class: rviz/Marker
+      Enabled: true
+      Marker Topic: /bruce/slam/slam/constraint
+      Name: Marker
+      Namespaces:
+        {}
+      Queue Size: 100
+      Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz/PointCloud2
+      Color: 239; 41; 41
+      Color Transformer: FlatColor
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Min Color: 0; 0; 0
+      Name: PointCloud2
+      Position Transformer: XYZ
+      Queue Size: 10
+      Selectable: true
+      Size (Pixels): 3
+      Size (m): 0.05000000074505806
+      Style: Flat Squares
+      Topic: /bruce/slam/feature_extraction/feature
+      Unreliable: false
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
+    - Class: rviz/Image
+      Enabled: true
+      Image Topic: /camera/image_raw
+      Max Value: 1
+      Median window: 5
+      Min Value: 0
+      Name: Image
+      Normalize Range: true
+      Queue Size: 2
+      Transport Hint: compressed
+      Unreliable: false
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 255; 255; 255
@@ -231,7 +360,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz/Orbit
-      Distance: 7.84099006652832
+      Distance: 7.359035491943359
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -239,17 +368,17 @@ Visualization Manager:
         Value: false
       Field of View: 0.7853981852531433
       Focal Point:
-        X: 0.20926067233085632
-        Y: 0.8744758367538452
-        Z: -0.4854271709918976
+        X: 1.0778974294662476
+        Y: -0.588929295539856
+        Z: -0.0006697820499539375
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: true
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 1.5697963237762451
+      Pitch: 1.4497965574264526
       Target Frame: <Fixed Frame>
-      Yaw: 1.0936174392700195
+      Yaw: 3.388598680496216
     Saved: ~
 Window Geometry:
   Displays:
@@ -261,7 +390,9 @@ Window Geometry:
     collapsed: false
   Horizontal Sonar:
     collapsed: false
-  QMainWindow State: 000000ff00000000fd0000000400000000000002070000035afc0200000008fb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c00610079007301000001c10000035a000000c900fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261000000010000010f0000035afc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a0056006900650077007300000001c10000035a000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b2000000000000000000000002000005a00000017efc0100000007fb000000200048006f00720069007a006f006e00740061006c00200053006f006e0061007201000000000000011e000000be00fffffffb000000260048006f00720069007a006f006e00740061006c00200046006500610074007500720065007301000001240000011f000000d300fffffffb0000001e005300650067006d0065006e00740065006400200049006d00610067006501000002490000012f000000c800fffffffb00000020005600650072006900740061006c002000460065006100740075007200650073010000037e00000114000000b800fffffffb0000001c0056006500720069007400630061006c00200053006f006e00610072010000049800000108000000ab00fffffffb0000000a0049006d0061006700650100000856000001aa0000000000000000fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000005a00000003dfc0100000002fb0000000800540069006d00650100000000000005a0000003bc00fffffffb0000000800540069006d00650100000000000004500000000000000000000003930000035a00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
+  Image:
+    collapsed: false
+  QMainWindow State: 000000ff00000000fd0000000400000000000002070000035afc020000000afb0000001200530065006c0065006300740069006f006e00000001e10000009b0000005c00fffffffb0000001e0054006f006f006c002000500072006f007000650072007400690065007302000001ed000001df00000185000000a3fb000000120056006900650077007300200054006f006f02000001df000002110000018500000122fb000000200054006f006f006c002000500072006f0070006500720074006900650073003203000002880000011d000002210000017afb000000100044006900730070006c00610079007301000001c10000022d000000c900fffffffb0000002000730065006c0065006300740069006f006e00200062007500660066006500720200000138000000aa0000023a00000294fb00000014005700690064006500530074006500720065006f02000000e6000000d2000003ee0000030bfb0000000c004b0069006e0065006300740200000186000001060000030c00000261fb0000000a0049006d00610067006501000003f4000001270000001600fffffffb0000000a0049006d0061006700650100000427000000f40000000000000000000000010000010f0000035afc0200000003fb0000001e0054006f006f006c002000500072006f00700065007200740069006500730100000041000000780000000000000000fb0000000a0056006900650077007300000001c10000035a000000a400fffffffb0000001200530065006c0065006300740069006f006e010000025a000000b2000000000000000000000002000005a00000017efc0100000007fb000000200048006f00720069007a006f006e00740061006c00200053006f006e0061007201000000000000011e000000be00fffffffb000000260048006f00720069007a006f006e00740061006c00200046006500610074007500720065007301000001240000011f000000d300fffffffb0000001e005300650067006d0065006e00740065006400200049006d00610067006501000002490000012f000000c800fffffffb00000020005600650072006900740061006c002000460065006100740075007200650073010000037e00000114000000b800fffffffb0000001c0056006500720069007400630061006c00200053006f006e00610072010000049800000108000000ab00fffffffb0000000a0049006d0061006700650100000856000001aa0000000000000000fb0000000a00560069006500770073030000004e00000080000002e10000019700000003000005a00000003dfc0100000002fb0000000800540069006d00650100000000000005a0000003bc00fffffffb0000000800540069006d00650100000000000004500000000000000000000003930000035a00000004000000040000000800000008fc0000000100000002000000010000000a0054006f006f006c00730100000000ffffffff0000000000000000
   Segmented Image:
     collapsed: false
   Selection:

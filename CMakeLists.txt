@@ -117,6 +117,7 @@ catkin_package(
 # include_directories(include)
 include_directories(
         include/gpoctomap
+        include/gpcoctomap
         include/bgkoctomap
         include/bgkloctomap
 	include/bgklvoctomap
@@ -176,6 +177,14 @@ set(GP_SOURCE_FILES
   src/gpoctomap/gpoctree.cpp
 )
 
+# Files for GPC source
+set(GPC_SOURCE_FILES
+  src/gpcoctomap/gpcblock.cpp
+  src/gpcoctomap/gpcoctomap.cpp
+  src/gpcoctomap/gpcoctree_node.cpp
+  src/gpcoctomap/gpcoctree.cpp
+)
+
 add_executable(bgklvcoctomap_static_node
     ${BGKLVC_SOURCE_FILES}
     ${COMMON_SOURCE_FILES}
@@ -205,6 +214,13 @@ add_executable(gpoctomap_static_node
     ${COMMON_SOURCE_FILES}
     src/gpoctomap/gpoctomap_static_node.cpp
 )
+
+add_executable(gpcoctomap_static_node
+    ${GPC_SOURCE_FILES}
+    ${COMMON_SOURCE_FILES}
+    src/gpcoctomap/gpcoctomap_static_node.cpp
+)
+
 
 add_executable(bgklvcoctomap_server
     ${BGKLVC_SOURCE_FILES}
@@ -236,6 +252,12 @@ add_executable(gpoctomap_server
     src/gpoctomap/gpoctomap_server.cpp
 )
 
+add_executable(gpcoctomap_server
+    ${GPC_SOURCE_FILES}
+    ${COMMON_SOURCE_FILES}
+    src/gpcoctomap/gpcoctomap_server.cpp
+)
+
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 # add_dependencies(BGKOctoMap_node BGKOctoMap_generate_messages_cpp)
@@ -260,6 +282,11 @@ target_link_libraries(bgkoctomap_static_node
 target_link_libraries(gpoctomap_static_node
         ${catkin_LIBRARIES}
 )
+
+target_link_libraries(gpcoctomap_static_node
+        ${catkin_LIBRARIES}
+)
+
 target_link_libraries(bgklvcoctomap_server
         ${catkin_LIBRARIES}
 )
@@ -277,6 +304,10 @@ target_link_libraries(bgkoctomap_server
 )
 
 target_link_libraries(gpoctomap_server
+        ${catkin_LIBRARIES}
+)
+
+target_link_libraries(gpcoctomap_server
         ${catkin_LIBRARIES}
 )
 
