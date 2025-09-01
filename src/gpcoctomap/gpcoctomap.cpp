@@ -68,7 +68,7 @@ namespace la3dm {
         Block::key_loc_map = init_key_loc_map(resolution, block_depth);
     }
 
-    void GPCOctoMap::insert_training_data(const GPPointCloud &xy) {
+    void GPCOctoMap::insert_training_data(const GPCPointCloud &xy) {
         if (xy.empty())
             return;
 
@@ -80,7 +80,7 @@ namespace la3dm {
 
         for (auto it = xy.cbegin(); it != xy.cend(); ++it) {
             float p[] = {it->first.x(), it->first.y(), it->first.z()};
-            rtree.Insert(p, p, const_cast<GPPointType *>(&*it));
+            rtree.Insert(p, p, const_cast<GPCPointType *>(&*it));
         }
         /////////////////////////////////////////////////
 
@@ -102,20 +102,21 @@ namespace la3dm {
                 test_blocks.push_back(key);
             };
 
-            GPPointCloud block_xy;
+            GPCPointCloud block_xy;
             get_gp_points_in_bbox(key, block_xy);
             if (block_xy.size() < 1)
                 continue;
 
-            vector<float> block_x, block_y;
+            vector<float> block_x, block_y, block_c;
             for (auto it = block_xy.cbegin(); it != block_xy.cend(); ++it) {
                 block_x.push_back(it->first.x());
                 block_x.push_back(it->first.y());
                 block_x.push_back(it->first.z());
                 block_y.push_back(it->second);
+                block_c.push_back(it->intensity);
             }
             GPR3f *gpr = new GPR3f(OcTreeNode::sf2, OcTreeNode::ell, OcTreeNode::noise);
-            gpr->train(block_x, block_y);
+            gpr->train(block_x, block_y, block_c);
 #ifdef OPENMP
 #pragma omp critical
 #endif
@@ -202,7 +203,7 @@ namespace la3dm {
         rtree.RemoveAll();
     }
 
-    void GPCOctoMap::insert_pointcloud(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
+    void GPCOctoMap::insert_pointcloud(const PCLCPointCloud &cloud, const point3f &origin, float ds_resolution,
                                       float free_res, float max_range) {
 
 #ifdef DEBUG
@@ -211,7 +212,8 @@ namespace la3dm {
 
         ////////// Preparation //////////////////////////
         /////////////////////////////////////////////////
-        GPPointCloud xy;
+        GPCPointCloud xy;
+        vector<float> confidence_vec;
         get_training_data(cloud, origin, ds_resolution, free_res, max_range, xy);
 #ifdef DEBUG
         Debug_Msg("Training data size: " << xy.size());
@@ -225,12 +227,14 @@ namespace la3dm {
         point3f lim_min, lim_max;
         bbox(xy, lim_min, lim_max);
 
+        //define all blocks from point cloud input
         vector<BlockHashKey> blocks;
         get_blocks_in_bbox(lim_min, lim_max, blocks);
 
+        //insert training data into rtree
         for (auto it = xy.cbegin(); it != xy.cend(); ++it) {
             float p[] = {it->first.x(), it->first.y(), it->first.z()};
-            rtree.Insert(p, p, const_cast<GPPointType *>(&*it));
+            rtree.Insert(p, p, const_cast<GPCPointType *>(&*it));
         }
         /////////////////////////////////////////////////
 
@@ -241,6 +245,7 @@ namespace la3dm {
 #ifdef OPENMP
 #pragma omp parallel for schedule(dynamic)
 #endif
+        //create key for each block from point cloud, begin loop to process each block
         for (int i = 0; i < blocks.size(); ++i) {
             BlockHashKey key = blocks[i];
             ExtendedBlock eblock = get_extended_block(key);
@@ -252,20 +257,24 @@ namespace la3dm {
                 test_blocks.push_back(key);
             };
 
-            GPPointCloud block_xy;
+            //find data for each node individually, xy_idx is raw data
+            GPCPointCloud block_xy;
             get_gp_points_in_bbox(key, block_xy);
             if (block_xy.size() < 1)
                 continue;
 
-            vector<float> block_x, block_y;
+            vector<float> block_x, block_y, block_c;
             for (auto it = block_xy.cbegin(); it != block_xy.cend(); ++it) {
                 block_x.push_back(it->first.x());
                 block_x.push_back(it->first.y());
                 block_x.push_back(it->first.z());
+                block_c.push_back(it->intensity);
                 block_y.push_back(it->second);
             }
+             //push training data into node (legacy code, used to push into block)
             GPR3f *gpr = new GPR3f(OcTreeNode::sf2, OcTreeNode::ell, OcTreeNode::noise);
-            gpr->train(block_x, block_y);
+            gpr->train(block_x, block_y, block_c);
+
 #ifdef OPENMP
 #pragma omp critical
 #endif
@@ -277,6 +286,8 @@ namespace la3dm {
         Debug_Msg("GP training done");
         Debug_Msg("GP prediction: block number: " << test_blocks.size());
 #endif
+
+
         /////////////////////////////////////////////////
 
         ////////// Prediction ///////////////////////////
@@ -353,9 +364,9 @@ namespace la3dm {
         lim_min = point3f(0, 0, 0);
         lim_max = point3f(0, 0, 0);
 
-        GPPointCloud centers;
+        GPCPointCloud centers;
         for (auto it = block_arr.cbegin(); it != block_arr.cend(); ++it) {
-            centers.emplace_back(it->second->get_center(), 1);
+            centers.emplace_back(it->second->get_center(), 1, 0.0);
         }
         if (centers.size() > 0) {
             bbox(centers, lim_min, lim_max);
@@ -364,58 +375,95 @@ namespace la3dm {
         }
     }
 
-    void GPCOctoMap::get_training_data(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
-                                      float free_resolution, float max_range, GPPointCloud &xy) const {
-        PCLPointCloud sampled_hits;
+    void GPCOctoMap::get_training_data(const PCLCPointCloud &cloud, const point3f &origin, float ds_resolution,
+                                      float free_resolution, float max_range, GPCPointCloud &xy) const {
+        PCLCPointCloud sampled_hits;
         downsample(cloud, sampled_hits, ds_resolution);
 
-        PCLPointCloud frees;
+        PCLCPointCloud frees;
         frees.height = 1;
         frees.width = 0;
         xy.clear();
         for (auto it = sampled_hits.begin(); it != sampled_hits.end(); ++it) {
             point3f p(it->x, it->y, it->z);
+            float intensity = (it->intensity);
             if (max_range > 0) {
                 double l = (p - origin).norm();
                 if (l > max_range)
                     continue;
             }
-            xy.emplace_back(p, 1.0f);
+            xy.emplace_back(p, 1.0f, intensity);
 
             PointCloud frees_n;
             beam_sample(p, origin, frees_n, free_resolution);
 
-            frees.push_back(PCLPointType(origin.x(), origin.y(), origin.z()));
+            pcl::PointXYZI point;
+            point.x = origin.x();
+            point.y = origin.y();
+            point.z = origin.z();
+            point.intensity = intensity;
+            frees.push_back(point);
+
             for (auto p = frees_n.begin(); p != frees_n.end(); ++p) {
-                frees.push_back(PCLPointType(p->x(), p->y(), p->z()));
+                pcl::PointXYZI point;
+                point.x = p->x();
+                point.y = p->y();
+                point.z = p->z();
+                point.intensity = intensity;
+                frees.push_back(point);
                 frees.width++;
             }
         }
 
-        PCLPointCloud sampled_frees;
+        PCLCPointCloud sampled_frees;
         downsample(frees, sampled_frees, ds_resolution);
 
         for (auto it = sampled_frees.begin(); it != sampled_frees.end(); ++it) {
-            xy.emplace_back(point3f(it->x, it->y, it->z), -1);
+            xy.emplace_back(point3f(it->x, it->y, it->z), -1, it->intensity);
         }
     }
 
-    void GPCOctoMap::downsample(const PCLPointCloud &in, PCLPointCloud &out, float ds_resolution) const {
+    void GPCOctoMap::downsample(const PCLCPointCloud &in, PCLCPointCloud &out, float ds_resolution) const {
         if (ds_resolution < 0) {
             out = in;
             return;
         }
 
-        PCLPointCloud::Ptr pcl_in(new PCLPointCloud(in));
+        using VoxelKey = std::tuple<int, int, int>;
+        struct VoxelStats {
+            Eigen::Vector3f sum_xyz = Eigen::Vector3f::Zero();
+            float max_conf = -std::numeric_limits<float>::infinity();
+            int count = 0;
+        };
 
-        pcl::VoxelGrid<PCLPointType> sor;
-        sor.setInputCloud(pcl_in);
-        sor.setLeafSize(ds_resolution, ds_resolution, ds_resolution);
-        sor.filter(out);
+        std::unordered_map<VoxelKey, VoxelStats, boost::hash<VoxelKey>> voxel_map;
 
-//        vector<int> indices;
-//        pcl_out.is_dense = false;
-//        pcl::removeNaNFromPointCloud(out, out, indices);
+        // 1. Accumulate stats for each voxel
+        for (const auto& pt : in) {
+            if (!pcl::isFinite(pt)) continue;
+
+            int ix = static_cast<int>(std::floor(pt.x / ds_resolution));
+            int iy = static_cast<int>(std::floor(pt.y / ds_resolution));
+            int iz = static_cast<int>(std::floor(pt.z / ds_resolution));
+            VoxelKey key(ix, iy, iz);
+
+            auto& voxel = voxel_map[key];
+            voxel.sum_xyz += Eigen::Vector3f(pt.x, pt.y, pt.z);
+            voxel.max_conf = std::max(voxel.max_conf, pt.intensity);
+            voxel.count += 1;
+        }
+
+        // 2. Construct out
+        out.clear();
+        for (const auto& kv : voxel_map) {
+            const auto& stats = kv.second;
+            pcl::PointXYZI pt;
+            pt.x = stats.sum_xyz.x() / stats.count;
+            pt.y = stats.sum_xyz.y() / stats.count;
+            pt.z = stats.sum_xyz.z() / stats.count;
+            pt.intensity = stats.max_conf;
+            out.push_back(pt);
+        }
     }
 
     void GPCOctoMap::beam_sample(const point3f &hit, const point3f &origin, PointCloud &frees,
@@ -450,7 +498,7 @@ namespace la3dm {
      * Compute bounding box of pointcloud
      * Precondition: cloud non-empty
      */
-    void GPCOctoMap::bbox(const GPPointCloud &cloud, point3f &lim_min, point3f &lim_max) const {
+    void GPCOctoMap::bbox(const GPCPointCloud &cloud, point3f &lim_min, point3f &lim_max) const {
         assert(cloud.size() > 0);
         vector<float> x, y, z;
         for (auto it = cloud.cbegin(); it != cloud.cend(); ++it) {
@@ -484,7 +532,7 @@ namespace la3dm {
     }
 
     int GPCOctoMap::get_gp_points_in_bbox(const BlockHashKey &key,
-                                         GPPointCloud &out) {
+                                         GPCPointCloud &out) {
         point3f half_size(block_size / 2.0f, block_size / 2.0f, block_size / 2.0);
         point3f lim_min = hash_key_to_block(key) - half_size;
         point3f lim_max = hash_key_to_block(key) + half_size;
@@ -499,7 +547,7 @@ namespace la3dm {
     }
 
     int GPCOctoMap::get_gp_points_in_bbox(const point3f &lim_min, const point3f &lim_max,
-                                         GPPointCloud &out) {
+                                         GPCPointCloud &out) {
         float a_min[] = {lim_min.x(), lim_min.y(), lim_min.z()};
         float a_max[] = {lim_max.x(), lim_max.y(), lim_max.z()};
         return rtree.Search(a_min, a_max, GPCOctoMap::search_callback, static_cast<void *>(&out));
@@ -512,12 +560,12 @@ namespace la3dm {
         return rtree.Search(a_min, a_max, GPCOctoMap::count_callback, NULL);
     }
 
-    bool GPCOctoMap::count_callback(GPPointType *p, void *arg) {
+    bool GPCOctoMap::count_callback(GPCPointType *p, void *arg) {
         return false;
     }
 
-    bool GPCOctoMap::search_callback(GPPointType *p, void *arg) {
-        GPPointCloud *out = static_cast<GPPointCloud *>(arg);
+    bool GPCOctoMap::search_callback(GPCPointType *p, void *arg) {
+        GPCPointCloud *out = static_cast<GPCPointCloud *>(arg);
         out->push_back(*p);
         return true;
     }
@@ -532,7 +580,7 @@ namespace la3dm {
     }
 
     int GPCOctoMap::get_gp_points_in_bbox(const ExtendedBlock &block,
-                                         GPPointCloud &out) {
+                                         GPCPointCloud &out) {
         int n = 0;
         for (auto it = block.cbegin(); it != block.cend(); ++it) {
             n += get_gp_points_in_bbox(*it, out);

@@ -13,6 +13,8 @@ namespace la3dm {
     /// PCL PointCloud types as input
     typedef pcl::PointXYZ PCLPointType;
     typedef pcl::PointCloud<PCLPointType> PCLPointCloud;
+    typedef pcl::PointXYZI PCLCPointType;
+    typedef pcl::PointCloud<PCLCPointType> PCLCPointCloud;
 
     /*
      * @brief GPCOctoMap
@@ -25,11 +27,22 @@ namespace la3dm {
      */
     class GPCOctoMap {
     public:
+
+        // Suppose GPPointType is defined as:
+        struct GPCPointType {
+            point3f first;
+            float second;
+            float intensity;
+
+            GPCPointType(const point3f& p, float s, float i)
+                : first(p), second(s), intensity(i) {}
+        };
         /// Types used internally
         typedef std::vector<point3f> PointCloud;
         typedef std::pair<point3f, float> GPPointType;
         typedef std::vector<GPPointType> GPPointCloud;
-        typedef RTree<GPPointType *, float, 3, float> MyRTree;
+        typedef std::vector<GPCPointType> GPCPointCloud;
+        typedef RTree<GPCPointType *, float, 3, float> MyRTree;
 
     public:
         GPCOctoMap();
@@ -73,11 +86,11 @@ namespace la3dm {
          * @param free_res resolution for sampling free training points along sensor beams (default 2.0)
          * @param max_range maximum range for beams to be considered as valid measurements (-1 if no limitation)
          */
-        void insert_pointcloud(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
+        void insert_pointcloud(const PCLCPointCloud &cloud, const point3f &origin, float ds_resolution,
                                float free_res = 2.0f,
                                float max_range = -1);
 
-        void insert_training_data(const GPPointCloud &cloud);
+        void insert_training_data(const GPCPointCloud &cloud);
 
         /// Get bounding box of the map.
         void get_bbox(point3f &lim_min, point3f &lim_max) const;
@@ -323,7 +336,7 @@ namespace la3dm {
         }
 
         /// Get the bounding box of a pointcloud.
-        void bbox(const GPPointCloud &cloud, point3f &lim_min, point3f &lim_max) const;
+        void bbox(const GPCPointCloud &cloud, point3f &lim_min, point3f &lim_max) const;
 
         /// Get all block indices inside a bounding box.
         void get_blocks_in_bbox(const point3f &lim_min, const point3f &lim_max,
@@ -331,39 +344,39 @@ namespace la3dm {
 
         /// Get all points inside a bounding box assuming pointcloud has been inserted in rtree before.
         int get_gp_points_in_bbox(const point3f &lim_min, const point3f &lim_max,
-                                  GPPointCloud &out);
+                                  GPCPointCloud &out);
 
         /// @return true if point exists inside a bounding box assuming pointcloud has been inserted in rtree before.
         int has_gp_points_in_bbox(const point3f &lim_min, const point3f &lim_max);
 
         /// Get all points inside a bounding box (block) assuming pointcloud has been inserted in rtree before.
-        int get_gp_points_in_bbox(const BlockHashKey &key, GPPointCloud &out);
+        int get_gp_points_in_bbox(const BlockHashKey &key, GPCPointCloud &out);
 
         /// @return true if point exists inside a bounding box (block) assuming pointcloud has been inserted in rtree before.
         int has_gp_points_in_bbox(const BlockHashKey &key);
 
         /// Get all points inside an extended block assuming pointcloud has been inserted in rtree before.
-        int get_gp_points_in_bbox(const ExtendedBlock &block, GPPointCloud &out);
+        int get_gp_points_in_bbox(const ExtendedBlock &block, GPCPointCloud &out);
 
         /// @return true if point exists inside an extended block assuming pointcloud has been inserted in rtree before.
         int has_gp_points_in_bbox(const ExtendedBlock &block);
 
         /// RTree callback function
-        static bool count_callback(GPPointType *p, void *arg);
+        static bool count_callback(GPCPointType *p, void *arg);
 
         /// RTree callback function
-        static bool search_callback(GPPointType *p, void *arg);
+        static bool search_callback(GPCPointType *p, void *arg);
 
         /// Downsample PCLPointCloud using PCL VoxelGrid Filtering.
-        void downsample(const PCLPointCloud &in, PCLPointCloud &out, float ds_resolution) const;
+        void downsample(const PCLCPointCloud &in, PCLCPointCloud &out, float ds_resolution) const;
 
         /// Sample free training points along sensor beams.
         void beam_sample(const point3f &hits, const point3f &origin, PointCloud &frees,
                          float free_resolution) const;
 
         /// Get training data from one sensor scan.
-        void get_training_data(const PCLPointCloud &cloud, const point3f &origin, float ds_resolution,
-                               float free_resolution, float max_range, GPPointCloud &xy) const;
+        void get_training_data(const PCLCPointCloud &cloud, const point3f &origin, float ds_resolution,
+                               float free_resolution, float max_range, GPCPointCloud &xy) const;
 
         float resolution;
         float block_size;

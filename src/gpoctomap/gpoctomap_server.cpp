@@ -41,6 +41,7 @@ double l = 100;
 double min_var = 0.001;
 double max_var = 1000;
 double max_known_var = 0.02;
+std::vector<double> times_;
 
 void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
     
@@ -86,7 +87,7 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
         }
 
         ros::Time end = ros::Time::now();
-        ROS_INFO_STREAM("One cloud finished in " << (end - start).toSec() << "s");
+        //ROS_INFO_STREAM("One cloud finished in " << (end - start).toSec() << "s");
         updated = true;
     }
 
@@ -97,6 +98,7 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
 
         m_pub_occ->clear();
         m_pub_free->clear();
+        pcl::PointCloud<pcl::PointXYZ>::Ptr occupied_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
         for (auto it = map->begin_leaf(); it != map->end_leaf(); ++it) {
 
@@ -106,6 +108,7 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
+                    occupied_cloud->push_back(pcl::PointXYZ(p.x(), p.y(), p.z()));
                 } 
                 else 
                 {
@@ -136,11 +139,36 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
         }
         updated = false;
 
+        ros::Time end2 = ros::Time::now();
+        ROS_INFO_STREAM("One map published in " << (end2 - start).toSec() << "s");
+        double duration = (end2 - start).toSec();
+
+        // Save the duration
+        times_.push_back(duration);
+
+        double sum = std::accumulate(times_.begin(), times_.end(), 0.0);
+        double avg = sum / times_.size();
+        // --- Standard Deviation ---
+        double sq_sum = std::inner_product(times_.begin(), times_.end(), times_.begin(), 0.0);
+        double stdev = std::sqrt(sq_sum / times_.size() - avg * avg);
+        ROS_INFO_STREAM("Average map publishing time: " 
+                        << avg << " SD " << stdev << " s over " << times_.size() << " runs.");
+        
+
         m_pub_occ->publish();
         m_pub_free->publish();
+        
+        if (!occupied_cloud || occupied_cloud->empty()) {
+            ROS_WARN("Occupied cloud is empty, not saving PCD file.");
+        } else {
+            if (pcl::io::savePCDFileBinary("/home/ivana-rfal/gpoctomap.pcd", *occupied_cloud) == -1) {
+                ROS_ERROR("Failed to save PCD file!");
+            } else {
+                ROS_INFO_STREAM("Saved occupancy map with " << occupied_cloud->size()
+                                << " points to /home/ivana-rfal/gpoctomap.pcd");
+            }
+        }
 
-        ros::Time end2 = ros::Time::now();
-        ROS_INFO_STREAM("One map published in " << (end2 - start2).toSec() << "s");
     }
 }
 

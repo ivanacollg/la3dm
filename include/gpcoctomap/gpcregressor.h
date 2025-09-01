@@ -19,6 +19,7 @@ namespace la3dm {
         using MatrixKType = Eigen::Matrix<T, -1, -1, Eigen::RowMajor>;
         using MatrixDKType = Eigen::Matrix<T, -1, 1>;
         using MatrixYType = Eigen::Matrix<T, -1, 1>;
+        using MatrixCType = Eigen::Matrix<T, -1, 1>;
 
         GPRegressor(T sf2, T ell, T noise) : sf2(sf2), ell(ell), noise(noise), trained(false) { }
 
@@ -27,11 +28,12 @@ namespace la3dm {
          * @param x input vector (3N, row major)
          * @param y target vector (N)
          */
-        void train(const std::vector<T> &x, const std::vector<T> &y) {
+        void train(const std::vector<T> &x, const std::vector<T> &y, const std::vector<T> &c) {
             assert(x.size() % dim == 0 && (int) (x.size() / dim) == y.size());
             MatrixXType _x = Eigen::Map<const MatrixXType>(x.data(), x.size() / dim, dim);
             MatrixYType _y = Eigen::Map<const MatrixYType>(y.data(), y.size(), 1);
-            train(_x, _y);
+            MatrixCType _c = Eigen::Map<const MatrixCType>(c.data(), c.size(), 1);
+            train(_x, _y, _c);
         }
 
         /*
@@ -39,11 +41,13 @@ namespace la3dm {
          * @param x input matrix (NX3)
          * @param y target matrix (NX1)
          */
-        void train(const MatrixXType &x, const MatrixYType &y) {
-            this->x = MatrixXType(x);
-            covMaterniso3(x, x, K);
-           // covSparse(x, x, K);
-            K = K + noise * MatrixKType::Identity(K.rows(), K.cols());
+        void train(const MatrixXType &x, const MatrixYType &y, const MatrixCType &c) {
+            this->xt = MatrixXType(x);
+            this->ct = MatrixCType(c);
+            covMaterniso3(x, x, c, K);
+            // covSparse(x, x, K);
+            //K = K + noise * MatrixKType::Identity(K.rows(), K.cols());
+            K = K + c.asDiagonal().toDenseMatrix(); //noise * MatrixKType::Identity(K.rows(), K.cols());
             Eigen::LLT<MatrixKType> llt(K);
             alpha = llt.solve(y);
             L = llt.matrixL();
@@ -80,7 +84,7 @@ namespace la3dm {
         void predict(const MatrixXType &xs, MatrixYType &m, MatrixYType &var) const {
             assert(trained == true);
             MatrixKType Ks;
-            covMaterniso3(x, xs, Ks);
+            covMaterniso3(xt, xs, ct, Ks);
            // covSparse(x, xs, Ks);
             m = Ks.transpose() * alpha;
 
@@ -111,7 +115,7 @@ namespace la3dm {
          * @param z input vector
          * @return Kxz covariance matrix
          */
-        void covMaterniso3(const MatrixXType &x, const MatrixXType &z, MatrixKType &Kxz) const {
+        void covMaterniso3(const MatrixXType &x, const MatrixXType &z, const MatrixCType &z_conf, MatrixKType &Kxz) const {
             dist(1.73205 / ell * x, 1.73205 / ell * z, Kxz);
             Kxz = ((1 + Kxz.array()) * exp(-Kxz.array())).matrix() * sf2;
         }
@@ -156,7 +160,8 @@ namespace la3dm {
         T ell;    // length-scale
         T noise;  // noise variance
 
-        MatrixXType x;   // temporary storage of training data
+        MatrixXType xt;   // temporary storage of training data
+        MatrixCType ct;   // temporary storage of training data
         MatrixKType K;
         MatrixYType alpha;
         MatrixKType L;

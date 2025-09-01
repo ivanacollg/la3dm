@@ -4,7 +4,7 @@
 #include "gpcoctomap.h"
 #include "markerarray_pub.h"
 
-void load_pcd(std::string filename, la3dm::point3f &origin, la3dm::PCLPointCloud &cloud) {
+void load_pcd(std::string filename, la3dm::point3f &origin, la3dm::PCLCPointCloud &cloud) {
     pcl::PCLPointCloud2 cloud2;
     Eigen::Vector4f _origin;
     Eigen::Quaternionf orientaion;
@@ -92,7 +92,7 @@ int main(int argc, char **argv) {
 
     ros::Time start = ros::Time::now();
     for (int scan_id = 1; scan_id <= scan_num; ++scan_id) {
-        la3dm::PCLPointCloud cloud;
+        la3dm::PCLCPointCloud cloud;
         la3dm::point3f origin;
         std::string filename(dir + "/" + prefix + "_" + std::to_string(scan_id) + ".pcd");
         load_pcd(filename, origin, cloud);

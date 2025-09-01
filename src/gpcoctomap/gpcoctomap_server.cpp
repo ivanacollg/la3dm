@@ -6,6 +6,11 @@
 #include "markerarray_pub.h"
 #include "gpcoctomap.h"
 
+#include <cstdlib>
+
+#include <pcl/io/pcd_io.h>
+#include <pcl/point_types.h>
+
 tf::TransformListener *listener;
 std::string frame_id("/map");
 la3dm::GPCOctoMap *map;
@@ -42,6 +47,8 @@ double min_var = 0.001;
 double max_var = 1000;
 double max_known_var = 0.02;
 
+std::vector<double> times_;
+
 void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
     
     tf::StampedTransform transform;
@@ -71,22 +78,22 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
         sensor_msgs::PointCloud2 cloud_map;
         pcl_ros::transformPointCloud(frame_id, *cloud, cloud_map, *listener);
 
-        la3dm::PCLPointCloud::Ptr pcl_cloud (new la3dm::PCLPointCloud());
+        la3dm::PCLCPointCloud::Ptr pcl_cloud (new la3dm::PCLCPointCloud());
         pcl::fromROSMsg(cloud_map, *pcl_cloud);
 
         //downsample for faster mapping
-        la3dm::PCLPointCloud filtered_cloud;
-        pcl::VoxelGrid<pcl::PointXYZ> filterer;
-        filterer.setInputCloud(pcl_cloud);
-        filterer.setLeafSize(ds_resolution, ds_resolution, ds_resolution);
-        filterer.filter(filtered_cloud);
+        //la3dm::PCLCPointCloud filtered_cloud;
+        //pcl::VoxelGrid<pcl::PointXYZ> filterer;
+        //filterer.setInputCloud(pcl_cloud);
+        //filterer.setLeafSize(ds_resolution, ds_resolution, ds_resolution);
+        //filterer.filter(filtered_cloud);
 
-        if(filtered_cloud.size() > 5){
-            map->insert_pointcloud(filtered_cloud, origin, (float) resolution, (float) free_resolution, (float) max_range);
+        if(pcl_cloud->size() > 5){
+            map->insert_pointcloud(*pcl_cloud, origin, (float) resolution, (float) free_resolution, (float) max_range);
         }
 
-        ros::Time end = ros::Time::now();
-        ROS_INFO_STREAM("One cloud finished in " << (end - start).toSec() << "s");
+        //ros::Time end = ros::Time::now();
+        //ROS_INFO_STREAM("One cloud finished in " << (end - start).toSec() << "s");
         updated = true;
     }
 
@@ -97,6 +104,7 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
 
         m_pub_occ->clear();
         m_pub_free->clear();
+        pcl::PointCloud<pcl::PointXYZ>::Ptr occupied_cloud(new pcl::PointCloud<pcl::PointXYZ>);
 
         for (auto it = map->begin_leaf(); it != map->end_leaf(); ++it) {
 
@@ -106,6 +114,7 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                 if (original_size) 
                 {
                     m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
+                    occupied_cloud->push_back(pcl::PointXYZ(p.x(), p.y(), p.z()));
                 } 
                 else 
                 {
@@ -130,7 +139,8 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
                         m_pub_free->insert_point3d(n->x(), n->y(), n->z(), min_z, max_z, map->get_resolution(), it.get_node().get_prob());
                     }
                 }
-                
+                        m_pub_occ->publish();
+        m_pub_free->publish();
             }
             
         }
@@ -140,9 +150,35 @@ void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
         m_pub_free->publish();
 
         ros::Time end2 = ros::Time::now();
-        ROS_INFO_STREAM("One map published in " << (end2 - start2).toSec() << "s");
+        ROS_INFO_STREAM("One map published in " << (end2 - start).toSec() << "s");
+        double duration = (end2 - start).toSec();
+
+        // Save the duration
+        times_.push_back(duration);
+
+        double sum = std::accumulate(times_.begin(), times_.end(), 0.0);
+        double avg = sum / times_.size();
+        // --- Standard Deviation ---
+        double sq_sum = std::inner_product(times_.begin(), times_.end(), times_.begin(), 0.0);
+        double stdev = std::sqrt(sq_sum / times_.size() - avg * avg);
+        ROS_INFO_STREAM("Average map publishing time: " 
+                        << avg << " SD " << stdev << " s over " << times_.size() << " runs.");
+        
+
+        if (!occupied_cloud || occupied_cloud->empty()) {
+            ROS_WARN("Occupied cloud is empty, not saving PCD file.");
+        } else {
+            if (pcl::io::savePCDFileBinary("/home/ivana-rfal/gpoctomap.pcd", *occupied_cloud) == -1) {
+                ROS_ERROR("Failed to save PCD file!");
+            } else {
+                ROS_INFO_STREAM("Saved occupancy map with " << occupied_cloud->size()
+                                << " points to /home/ivana-rfal/gpoctomap.pcd");
+            }
+        }
+
     }
 }
+
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "gpcoctomap_server");
@@ -201,7 +237,7 @@ int main(int argc, char **argv) {
     m_pub_free = new la3dm::MarkerArrayPub(nh, map_topic_free, resolution);
 
     listener = new tf::TransformListener();
-    
+
     while(ros::ok())
     {
     	ros::spin();
