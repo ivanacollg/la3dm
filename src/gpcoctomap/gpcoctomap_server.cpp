@@ -1,5 +1,7 @@
 #include <string>
 #include <iostream>
+#include <numeric>
+#include <cmath>
 #include <ros/ros.h>
 #include <pcl_ros/transforms.h>
 #include <pcl/filters/voxel_grid.h>
@@ -7,241 +9,184 @@
 #include "gpcoctomap.h"
 
 #include <cstdlib>
-
 #include <pcl/io/pcd_io.h>
 #include <pcl/point_types.h>
 
-tf::TransformListener *listener;
-std::string frame_id("/map");
-la3dm::GPCOctoMap *map;
+class GpcoctomapHandler {
+public:
+    GpcoctomapHandler(ros::NodeHandle& nh, const std::string& cloud_topic)
+        : nh_(nh), listener_(new tf::TransformListener()), 
+          frame_id_("/map"), first_(true), updated_(false),
+          position_change_thresh_(0.1), orientation_change_thresh_(0.2) 
+    {
+        // Params
+        nh_.param<std::string>("topic", map_topic_occ_, std::string("/occupied_cells_vis_array"));
+        nh_.param<std::string>("topic_free", map_topic_free_, std::string("/free_cells_vis_array"));
+        nh_.param<double>("max_range", max_range_, -1.0);
+        nh_.param<double>("resolution", resolution_, 0.1);
+        nh_.param<int>("block_depth", block_depth_, 4);
+        nh_.param<double>("sf2", sf2_, 1.0);
+        nh_.param<double>("ell", ell_, 1.0);
+        nh_.param<double>("free_resolution", free_resolution_, 0.1);
+        nh_.param<double>("ds_resolution", ds_resolution_, 0.1);
+        nh_.param<double>("free_thresh", free_thresh_, 0.3);
+        nh_.param<double>("occupied_thresh", occupied_thresh_, 0.7);
+        nh_.param<double>("min_z", min_z_, 0.0);
+        nh_.param<double>("max_z", max_z_, 0.0);
+        nh_.param<bool>("original_size", original_size_, true);
 
-la3dm::MarkerArrayPub *m_pub_occ, *m_pub_free;
+        nh_.param<double>("noise", noise_, 0.01);
+        nh_.param<double>("l", l_, 100.0);
+        nh_.param<double>("min_var", min_var_, 0.001);
+        nh_.param<double>("max_var", max_var_, 1000.0);
+        nh_.param<double>("max_known_var", max_known_var_, 0.02);
 
-tf::Vector3 last_position;
-tf::Quaternion last_orientation;
-bool first = true;
-double position_change_thresh = 0.1;
-double orientation_change_thresh = 0.2;
-bool updated = false;
+        map_ = new la3dm::GPCOctoMap(resolution_, block_depth_, sf2_, ell_,
+                                     noise_, l_, min_var_, max_var_, max_known_var_,
+                                     free_thresh_, occupied_thresh_);
 
-//Universal parameters
-std::string map_topic_occ("/occupied_cells_vis_array");
-std::string map_topic_free("/free_cells_vis_array");
-double max_range = -1;
-double resolution = 0.1;
-int block_depth = 4;
-double sf2 = 1.0;
-double ell = 1.0;
-double free_resolution = 0.1;
-double ds_resolution = 0.1;
-double free_thresh = 0.3;
-double occupied_thresh = 0.7;
-double min_z = 0;
-double max_z = 0;
-bool original_size = true;
+        m_pub_occ_ = new la3dm::MarkerArrayPub(nh_, map_topic_occ_, resolution_);
+        m_pub_free_ = new la3dm::MarkerArrayPub(nh_, map_topic_free_, resolution_);
 
-//parameters for GPCOctomap
-double noise = 0.01;
-double l = 100;
-double min_var = 0.001;
-double max_var = 1000;
-double max_known_var = 0.02;
-
-std::vector<double> times_;
-
-void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
-    
-    tf::StampedTransform transform;
-    try {
-        listener->waitForTransform(frame_id, cloud->header.frame_id, cloud->header.stamp, ros::Duration(5.0));
-        listener->lookupTransform(frame_id, cloud->header.frame_id, cloud->header.stamp, transform); //ros::Time::now() -- Don't use this because processing time delay breaks it
-    } catch (tf::TransformException ex) {
-        ROS_ERROR("%s", ex.what());
-        return;
+        point_sub_ = nh_.subscribe<sensor_msgs::PointCloud2>(cloud_topic, 1,
+                        &GpcoctomapHandler::cloudHandler, this);
     }
 
-    ros::Time start = ros::Time::now();
-    la3dm::point3f origin;
-    tf::Vector3 translation = transform.getOrigin();
-    tf::Quaternion orientation = transform.getRotation();
-
-    if (first || orientation.angleShortestPath(last_orientation) > orientation_change_thresh || translation.distance(last_position) > position_change_thresh) 
-    {
-        ROS_INFO_STREAM("Cloud received");
-        
-        last_position = translation;
-        last_orientation = orientation;
-        origin.x() = (float) translation.x();
-        origin.y() = (float) translation.y();
-        origin.z() = (float) translation.z();
-
-        sensor_msgs::PointCloud2 cloud_map;
-        pcl_ros::transformPointCloud(frame_id, *cloud, cloud_map, *listener);
-
-        la3dm::PCLCPointCloud::Ptr pcl_cloud (new la3dm::PCLCPointCloud());
-        pcl::fromROSMsg(cloud_map, *pcl_cloud);
-
-        //downsample for faster mapping
-        //la3dm::PCLCPointCloud filtered_cloud;
-        //pcl::VoxelGrid<pcl::PointXYZ> filterer;
-        //filterer.setInputCloud(pcl_cloud);
-        //filterer.setLeafSize(ds_resolution, ds_resolution, ds_resolution);
-        //filterer.filter(filtered_cloud);
-
-        if(pcl_cloud->size() > 5){
-            map->insert_pointcloud(*pcl_cloud, origin, (float) resolution, (float) free_resolution, (float) max_range);
-        }
-
-        //ros::Time end = ros::Time::now();
-        //ROS_INFO_STREAM("One cloud finished in " << (end - start).toSec() << "s");
-        updated = true;
-    }
-
-
-    if (updated) 
-    {
-        ros::Time start2 = ros::Time::now();
-
-        m_pub_occ->clear();
-        m_pub_free->clear();
-        pcl::PointCloud<pcl::PointXYZ>::Ptr occupied_cloud(new pcl::PointCloud<pcl::PointXYZ>);
-
-        for (auto it = map->begin_leaf(); it != map->end_leaf(); ++it) {
-
-            la3dm::point3f p = it.get_loc();
-
-            if (it.get_node().get_state() == la3dm::State::OCCUPIED) {
-                if (original_size) 
-                {
-                    m_pub_occ->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size());
-                    occupied_cloud->push_back(pcl::PointXYZ(p.x(), p.y(), p.z()));
-                } 
-                else 
-                {
-                    auto pruned = it.get_pruned_locs();
-                    for (auto n = pruned.cbegin(); n < pruned.cend(); ++n) 
-                    {
-                        m_pub_occ->insert_point3d(n->x(), n->y(), n->z(), min_z, max_z, map->get_resolution());
-                    }
-                }
-            }
-            else if(it.get_node().get_state() == la3dm::State::FREE)
-            {
-                if (original_size) 
-                {
-                    m_pub_free->insert_point3d(p.x(), p.y(), p.z(), min_z, max_z, it.get_size(), it.get_node().get_prob());
-                } 
-                else 
-                {
-                    auto pruned = it.get_pruned_locs();
-                    for (auto n = pruned.cbegin(); n < pruned.cend(); ++n) 
-                    {
-                        m_pub_free->insert_point3d(n->x(), n->y(), n->z(), min_z, max_z, map->get_resolution(), it.get_node().get_prob());
-                    }
-                }
-                        m_pub_occ->publish();
-        m_pub_free->publish();
-            }
-            
-        }
-        updated = false;
-
-        m_pub_occ->publish();
-        m_pub_free->publish();
-
-        ros::Time end2 = ros::Time::now();
-        ROS_INFO_STREAM("One map published in " << (end2 - start).toSec() << "s");
-        double duration = (end2 - start).toSec();
-
-        // Save the duration
-        times_.push_back(duration);
-
-        double sum = std::accumulate(times_.begin(), times_.end(), 0.0);
-        double avg = sum / times_.size();
-        // --- Standard Deviation ---
-        double sq_sum = std::inner_product(times_.begin(), times_.end(), times_.begin(), 0.0);
-        double stdev = std::sqrt(sq_sum / times_.size() - avg * avg);
-        ROS_INFO_STREAM("Average map publishing time: " 
-                        << avg << " SD " << stdev << " s over " << times_.size() << " runs.");
-        
-
-        if (!occupied_cloud || occupied_cloud->empty()) {
-            ROS_WARN("Occupied cloud is empty, not saving PCD file.");
-        } else {
-            if (pcl::io::savePCDFileBinary("/home/ivana-rfal/gpoctomap.pcd", *occupied_cloud) == -1) {
+    ~GpcoctomapHandler() {
+        // Save Occupied Cloud
+        if (occupied_cloud_ && !occupied_cloud_->empty()) {
+            if (pcl::io::savePCDFileBinary("/home/ivana-rfal/gpcoctomap.pcd", *occupied_cloud_) == -1) {
                 ROS_ERROR("Failed to save PCD file!");
             } else {
-                ROS_INFO_STREAM("Saved occupancy map with " << occupied_cloud->size()
-                                << " points to /home/ivana-rfal/gpoctomap.pcd");
+                ROS_INFO_STREAM("Saved occupancy map with " << occupied_cloud_->size()
+                                << " points to /home/ivana-rfal/gpcoctomap.pcd");
             }
+        } else {
+            ROS_WARN("Occupied cloud is empty, not saving PCD file.");
         }
 
-    }
-}
+        // Compute and log timing stats
+        if (!times_.empty()) {
+            double sum = std::accumulate(times_.begin(), times_.end(), 0.0);
+            double avg = sum / times_.size();
+            double sq_sum = std::inner_product(times_.begin(), times_.end(), times_.begin(), 0.0);
+            double stdev = std::sqrt(sq_sum / times_.size() - avg * avg);
 
+            ROS_INFO_STREAM("Final Timing Stats: Average = " << avg 
+                            << "s, StdDev = " << stdev 
+                            << "s over " << times_.size() << " runs.");
+        }
+    }
+
+private:
+    void cloudHandler(const sensor_msgs::PointCloud2ConstPtr &cloud) {
+        tf::StampedTransform transform;
+        try {
+            listener_->waitForTransform(frame_id_, cloud->header.frame_id, cloud->header.stamp, ros::Duration(5.0));
+            listener_->lookupTransform(frame_id_, cloud->header.frame_id, cloud->header.stamp, transform);
+        } catch (tf::TransformException ex) {
+            ROS_ERROR("%s", ex.what());
+            return;
+        }
+
+        ros::Time start = ros::Time::now();
+        la3dm::point3f origin;
+        tf::Vector3 translation = transform.getOrigin();
+        tf::Quaternion orientation = transform.getRotation();
+
+        if (first_ || orientation.angleShortestPath(last_orientation_) > orientation_change_thresh_ ||
+            translation.distance(last_position_) > position_change_thresh_) 
+        {
+            ROS_INFO_STREAM("Cloud received");
+
+            last_position_ = translation;
+            last_orientation_ = orientation;
+            first_ = false;
+
+            origin.x() = (float) translation.x();
+            origin.y() = (float) translation.y();
+            origin.z() = (float) translation.z();
+
+            sensor_msgs::PointCloud2 cloud_map;
+            pcl_ros::transformPointCloud(frame_id_, *cloud, cloud_map, *listener_);
+
+            la3dm::PCLCPointCloud::Ptr pcl_cloud(new la3dm::PCLCPointCloud());
+            pcl::fromROSMsg(cloud_map, *pcl_cloud);
+
+            if (pcl_cloud->size() > 5) {
+                map_->insert_pointcloud(*pcl_cloud, origin, (float) resolution_, 
+                                        (float) free_resolution_, (float) max_range_);
+            }
+            updated_ = true;
+        }
+
+        if (updated_) {
+            ros::Time start2 = ros::Time::now();
+
+            m_pub_occ_->clear();
+            m_pub_free_->clear();
+            occupied_cloud_.reset(new pcl::PointCloud<pcl::PointXYZ>);
+
+            for (auto it = map_->begin_leaf(); it != map_->end_leaf(); ++it) {
+                la3dm::point3f p = it.get_loc();
+                if (it.get_node().get_state() == la3dm::State::OCCUPIED) {
+                    if (original_size_) {
+                        m_pub_occ_->insert_point3d(p.x(), p.y(), p.z(), min_z_, max_z_, it.get_size());
+                        occupied_cloud_->push_back(pcl::PointXYZ(p.x(), p.y(), p.z()));
+                    } else {
+                        auto pruned = it.get_pruned_locs();
+                        for (auto n = pruned.cbegin(); n < pruned.cend(); ++n)
+                            m_pub_occ_->insert_point3d(n->x(), n->y(), n->z(), min_z_, max_z_, map_->get_resolution());
+                    }
+                }
+            }
+
+            m_pub_occ_->publish();
+            m_pub_free_->publish();
+            updated_ = false;
+
+            ros::Time end2 = ros::Time::now();
+            double duration = (end2 - start2).toSec();
+            times_.push_back(duration);
+
+            ROS_INFO_STREAM("One map published in " << duration << "s");
+        }
+    }
+
+    // --- Members ---
+    ros::NodeHandle nh_;
+    ros::Subscriber point_sub_;
+    tf::TransformListener* listener_;
+    std::string frame_id_;
+    la3dm::GPCOctoMap* map_;
+    la3dm::MarkerArrayPub *m_pub_occ_, *m_pub_free_;
+
+    pcl::PointCloud<pcl::PointXYZ>::Ptr occupied_cloud_;
+
+    tf::Vector3 last_position_;
+    tf::Quaternion last_orientation_;
+    bool first_, updated_;
+    double position_change_thresh_, orientation_change_thresh_;
+
+    std::string map_topic_occ_, map_topic_free_;
+    double max_range_, resolution_, sf2_, ell_;
+    double free_resolution_, ds_resolution_;
+    double free_thresh_, occupied_thresh_;
+    double min_z_, max_z_;
+    bool original_size_;
+    double noise_, l_, min_var_, max_var_, max_known_var_;
+    int block_depth_;
+
+    std::vector<double> times_;
+};
 
 int main(int argc, char **argv) {
     ros::init(argc, argv, "gpcoctomap_server");
     ros::NodeHandle nh("~");
-    //incoming pointcloud topic, this could be put into the .yaml too
+
     std::string cloud_topic("/sonar_camera_merge/cloud");
+    GpcoctomapHandler handler(nh, cloud_topic);
 
-
-    //Universal parameters
-    nh.param<std::string>("topic", map_topic_occ, map_topic_occ);
-    nh.param<std::string>("topic_free", map_topic_free, map_topic_free);
-    nh.param<double>("max_range", max_range, max_range);
-    nh.param<double>("resolution", resolution, resolution);
-    nh.param<int>("block_depth", block_depth, block_depth);
-    nh.param<double>("sf2", sf2, sf2);
-    nh.param<double>("ell", ell, ell);
-    nh.param<double>("free_resolution", free_resolution, free_resolution);
-    nh.param<double>("ds_resolution", ds_resolution, ds_resolution);
-    nh.param<double>("free_thresh", free_thresh, free_thresh);
-    nh.param<double>("occupied_thresh", occupied_thresh, occupied_thresh);
-    nh.param<double>("min_z", min_z, min_z);
-    nh.param<double>("max_z", max_z, max_z);
-    nh.param<bool>("original_size", original_size, original_size);
-
-    //parameters for GPCOctomap
-    nh.param<double>("noise", noise, noise);
-    nh.param<double>("l", l, l);
-    nh.param<double>("min_var", min_var, min_var);
-    nh.param<double>("max_var", max_var, max_var);
-    nh.param<double>("max_known_var", max_known_var, max_known_var);
-
-    ROS_INFO_STREAM("Parameters:" << std::endl <<
-            "topic: " << map_topic_occ << std::endl <<
-            "max_range: " << max_range << std::endl <<
-            "resolution: " << resolution << std::endl <<
-            "block_depth: " << block_depth << std::endl <<
-            "sf2: " << sf2 << std::endl <<
-            "ell: " << ell << std::endl <<
-            "l: " << l << std::endl <<
-            "min_var: " << min_var << std::endl <<
-            "max_var: " << max_var << std::endl <<
-            "max_known_var: " << max_known_var << std::endl <<
-            "free_resolution: " << free_resolution << std::endl <<
-            "ds_resolution: " << ds_resolution << std::endl <<
-            "free_thresh: " << free_thresh << std::endl <<
-            "occupied_thresh: " << occupied_thresh << std::endl <<
-            "min_z: " << min_z << std::endl <<
-            "max_z: " << max_z << std::endl <<
-            "original_size: " << original_size
-            );
-
-    map = new la3dm::GPCOctoMap(resolution, block_depth, sf2, ell, noise, l, min_var, max_var, max_known_var, free_thresh, occupied_thresh);
-    
-    ros::Subscriber point_sub = nh.subscribe<sensor_msgs::PointCloud2>(cloud_topic, 1, cloudHandler);
-    m_pub_occ = new la3dm::MarkerArrayPub(nh, map_topic_occ, resolution);
-    m_pub_free = new la3dm::MarkerArrayPub(nh, map_topic_free, resolution);
-
-    listener = new tf::TransformListener();
-
-    while(ros::ok())
-    {
-    	ros::spin();
-    }
-
+    ros::spin();
     return 0;
 }
