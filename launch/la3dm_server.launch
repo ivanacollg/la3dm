@@ -4,12 +4,13 @@
     <!-- See la3dm/config/methods/bgkoctomap.yaml for config parameters -->
 
     <!-- Define transform between sensor and map as needed -->
-    <node pkg="tf" type="static_transform_publisher" name="static_transform_publisher" args="0 0 0 0 0 0 odom map 50"/>
-    <node pkg="tf" type="static_transform_publisher" name="static_transform_publisher2" args="0 0 0 0 0 0 base_link velodyne 50"/>
+    <!--node pkg="tf" type="static_transform_publisher" name="static_transform_publisher" args="0 0 0 0 0 0 odom map 50"/-->
+    <!--node pkg="tf" type="static_transform_publisher" name="static_transform_publisher2" args="0 0 0 0 0 0 base_link velodyne 50"/-->
 
     <param name="/use_sim_time" value="true"/>
 
-    <arg name="method" default="bgklvcoctomap"/>
+    <arg name="method" default="gpcoctomap"/>
+    <arg name="environment" default="marina"/>
     <arg name="method_config" value="$(find la3dm)/config/methods"/>
 
     <arg name="rviz" default="true" />
@@ -24,7 +25,7 @@
     <node pkg="la3dm" type="$(arg method)_server" name="la3dm_server" output="screen">
 
         <!-- Load method configuration from file -->
-        <rosparam file="$(arg method_config)/$(arg method)_tank_disks.yaml" command="load"/>
+        <rosparam file="$(arg method_config)/bgklvcoctomap_$(arg environment).yaml" command="load"/>
         
     </node>
 

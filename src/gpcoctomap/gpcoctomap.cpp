@@ -432,7 +432,7 @@ namespace la3dm {
         using VoxelKey = std::tuple<int, int, int>;
         struct VoxelStats {
             Eigen::Vector3f sum_xyz = Eigen::Vector3f::Zero();
-            float max_conf = -std::numeric_limits<float>::infinity();
+            float min_conf = 0.0;
             int count = 0;
         };
 
@@ -449,7 +449,7 @@ namespace la3dm {
 
             auto& voxel = voxel_map[key];
             voxel.sum_xyz += Eigen::Vector3f(pt.x, pt.y, pt.z);
-            voxel.max_conf = std::max(voxel.max_conf, pt.intensity);
+            voxel.min_conf +=  pt.intensity;
             voxel.count += 1;
         }
 
@@ -461,7 +461,7 @@ namespace la3dm {
             pt.x = stats.sum_xyz.x() / stats.count;
             pt.y = stats.sum_xyz.y() / stats.count;
             pt.z = stats.sum_xyz.z() / stats.count;
-            pt.intensity = stats.max_conf;
+            pt.intensity = stats.min_conf/ stats.count;
             out.push_back(pt);
         }
     }

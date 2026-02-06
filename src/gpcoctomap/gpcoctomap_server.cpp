@@ -48,7 +48,7 @@ public:
         m_pub_occ_ = new la3dm::MarkerArrayPub(nh_, map_topic_occ_, resolution_);
         m_pub_free_ = new la3dm::MarkerArrayPub(nh_, map_topic_free_, resolution_);
 
-        point_sub_ = nh_.subscribe<sensor_msgs::PointCloud2>(cloud_topic, 1,
+        point_sub_ = nh_.subscribe<sensor_msgs::PointCloud2>(cloud_topic, 100,
                         &GpcoctomapHandler::cloudHandler, this);
     }
 
@@ -72,9 +72,9 @@ public:
             double sq_sum = std::inner_product(times_.begin(), times_.end(), times_.begin(), 0.0);
             double stdev = std::sqrt(sq_sum / times_.size() - avg * avg);
 
-            ROS_INFO_STREAM("Final Timing Stats: Average = " << avg 
-                            << "s, StdDev = " << stdev 
-                            << "s over " << times_.size() << " runs.");
+            //ROS_INFO_STREAM("Final Timing Stats: Average = " << avg 
+            //                << "s, StdDev = " << stdev 
+            //                << "s over " << times_.size() << " runs.");
         }
     }
 
@@ -97,7 +97,7 @@ private:
         if (first_ || orientation.angleShortestPath(last_orientation_) > orientation_change_thresh_ ||
             translation.distance(last_position_) > position_change_thresh_) 
         {
-            ROS_INFO_STREAM("Cloud received");
+            //ROS_INFO_STREAM("Cloud received");
 
             last_position_ = translation;
             last_orientation_ = orientation;
@@ -146,10 +146,19 @@ private:
             updated_ = false;
 
             ros::Time end2 = ros::Time::now();
-            double duration = (end2 - start2).toSec();
+            double duration = (end2 - start).toSec();
             times_.push_back(duration);
 
-            ROS_INFO_STREAM("One map published in " << duration << "s");
+            // Compute and log timing stats
+            double sum = std::accumulate(times_.begin(), times_.end(), 0.0);
+            double avg = sum / times_.size();
+            double sq_sum = std::inner_product(times_.begin(), times_.end(), times_.begin(), 0.0);
+            double stdev = std::sqrt(sq_sum / times_.size() - avg * avg);
+
+            //ROS_INFO_STREAM("Timing Stats: Average = " << avg 
+            //                << "s, StdDev = " << stdev 
+            //                << "s over " << times_.size() << " runs.");
+        
         }
     }
 
